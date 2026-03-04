@@ -26,6 +26,7 @@ enum {
     TK_NEQ, TK_AND,      
     TK_DEC, TK_HEX,      // 十进制、十六进制常量
     TK_REG,              // 寄存器名，例如 $pc / $a0
+    TK_NEG,   // 一元负号
 
   /* TODO: Add more token types */
 
@@ -54,8 +55,8 @@ static struct rule {
     {"\\(", '('},                  // (
     {"\\)", ')'},                  // )
 
-    {"0[xX][0-9a-fA-F]+", TK_HEX}, // 十六进制常量
-    {"[0-9]+", TK_DEC},            // 十进制常量
+    {"0[xX][0-9a-fA-F]+[uU]?", TK_HEX},  // 支持 0x10u
+    {"[0-9]+[uU]?", TK_DEC},             // 支持 123u
     {"\\$?[a-zA-Z][a-zA-Z0-9]*", TK_REG}, // 寄存器名: $pc / pc / $a0
 };
 
@@ -85,7 +86,8 @@ typedef struct token {
   char str[32];
 } Token;
 
-static Token tokens[32] __attribute__((used)) = {};
+#define TOKENS_MAX 4096
+static Token tokens[TOKENS_MAX] __attribute__((used)) = {};
 static int nr_token __attribute__((used))  = 0;
 
 static bool make_token(char *e) {
@@ -102,8 +104,8 @@ static bool make_token(char *e) {
         char *substr_start = e + position;
         int substr_len = pmatch.rm_eo;
 
-        Log("match rules[%d] = \"%s\" at position %d with len %d: %.*s",
-            i, rules[i].regex, position, substr_len, substr_len, substr_start);
+        // Log("match rules[%d] = \"%s\" at position %d with len %d: %.*s",
+        //     i, rules[i].regex, position, substr_len, substr_len, substr_start);
 
         position += substr_len;
 
@@ -153,6 +155,21 @@ static bool make_token(char *e) {
     }
   }
 
+  // 二次扫描：根据上下文把 '-' 区分成减号或一元负号
+    for (int i = 0; i < nr_token; i++) {
+      if (tokens[i].type == '-') {
+        if (i == 0) {
+          tokens[i].type = TK_NEG;
+        } else {
+          int prev = tokens[i - 1].type;
+          if (prev == '(' || prev == '+' || prev == '-' || prev == '*' || prev == '/' ||
+              prev == TK_EQ || prev == TK_NEQ || prev == TK_AND || prev == TK_NEG) {
+            tokens[i].type = TK_NEG;
+          }
+        }
+      }
+    }
+
   return true;
 }
 
@@ -165,7 +182,8 @@ static int precedence(int type) {
       case '+':
       case '-':    return 3;
       case '*':
-      case '/':    return 4;           // 最高
+      case '/':    return 4;           
+      case TK_NEG: return 5;  // 高于 * /
       default:     return 0;           // 非运算符
     }
   }
@@ -262,6 +280,13 @@ static bool check_parentheses(int p, int q) {
     if (op < 0) {
       *success = false;
       return 0;
+    }
+
+     if (tokens[op].type == TK_NEG) {
+      // 单目负号只计算右侧
+      word_t rhs = eval(op + 1, q, success);
+      if (!*success) return 0;
+      return (word_t)(-(sword_t)rhs);
     }
 
     // 递归求左右子表达式

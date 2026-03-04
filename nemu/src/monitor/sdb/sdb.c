@@ -179,7 +179,11 @@ static int cmd_si(char *args) {
     }
 
     // 按当前 ISA 位宽打印结果
-    printf(FMT_WORD "\n", val);
+    printf("hex=" FMT_WORD
+         "  dec(u)=" MUXDEF(CONFIG_ISA64, "%" PRIu64, "%" PRIu32)
+         "  dec(s)=" MUXDEF(CONFIG_ISA64, "%" PRId64, "%" PRId32)
+         "\n",
+         val, (word_t)val, (sword_t)val);
     return 0;
   }
 
