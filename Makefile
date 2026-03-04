@@ -1,5 +1,5 @@
 STUID = 9527
-STUNAME = zc
+STUNAME = zcq
 
 # DO NOT modify the following code!!!
 
