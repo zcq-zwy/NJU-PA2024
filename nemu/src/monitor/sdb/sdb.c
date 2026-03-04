@@ -18,6 +18,7 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 #include "sdb.h"
+#include <memory/vaddr.h>
 
 static int is_batch_mode = false;
 
@@ -73,8 +74,7 @@ static int cmd_si(char *args) {
     return 0;
   }
 
-  // 打印当前所有监视点信息（供 info w 调用）
-  void wp_display(void);
+
 
   /**
   命令层 -> 功能层 -> ISA实现层”：
@@ -115,6 +115,52 @@ static int cmd_si(char *args) {
     return 0;
   }
 
+
+  static int cmd_x(char *args) {
+    // 用法: x N 0xADDR
+    if (args == NULL) {
+      printf("Usage: x N 0xADDR\n");
+      return 0;
+    }
+
+    // 直接用 strtok 拆两个参数，避免手算指针出错
+    char *n_str = strtok(args, " ");
+    char *addr_str = strtok(NULL, " ");
+    if (n_str == NULL || addr_str == NULL) {
+      printf("Usage: x N 0xADDR\n");
+      return 0;
+    }
+
+    char *end_n = NULL;
+    unsigned long n = strtoul(n_str, &end_n, 10);
+    if (end_n == n_str || *end_n != '\0' || n == 0) {
+      printf("Invalid N: %s\n", n_str);
+      return 0;
+    }
+
+    // 简化版只接受十六进制地址
+    if (!(addr_str[0] == '0' && (addr_str[1] == 'x' || addr_str[1] == 'X'))) {
+      printf("Address must be hex like 0x80000000\n");
+      return 0;
+    }
+
+    char *end_addr = NULL;
+    vaddr_t addr = (vaddr_t)strtoul(addr_str, &end_addr, 16);
+    if (end_addr == addr_str || *end_addr != '\0') {
+      printf("Invalid address: %s\n", addr_str);
+      return 0;
+    }
+
+    // 连续输出 N 个 4-byte
+    for (unsigned long i = 0; i < n; i++) {
+      vaddr_t cur = addr + i * 4;
+      word_t data = vaddr_read(cur, 4);   // 若你想按物理地址读，改 paddr_read
+      printf(FMT_WORD ": " FMT_WORD "\n", cur, data);
+    }
+
+    return 0;
+  }
+
 static int cmd_help(char *args);
 
 static struct {
@@ -127,6 +173,7 @@ static struct {
   { "q", "Exit NEMU", cmd_q },
   { "si", "Step program by N instructions (default 1)", cmd_si },
   { "info", "Print program status: info r (registers), info w (watchpoints)", cmd_info },
+  { "x", "Scan memory: x N 0xADDR", cmd_x },
 
   /* TODO: Add more commands */
 
