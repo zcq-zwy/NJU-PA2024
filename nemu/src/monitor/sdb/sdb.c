@@ -49,7 +49,8 @@ static int cmd_c(char *args) {
 
 
 static int cmd_q(char *args) {
-  return -1;
+  set_nemu_state(NEMU_QUIT, cpu.pc, 0); // 标记为“用户主动退出”
+  return -1; // 让 sdb_mainloop 结束
 }
 
 static int cmd_help(char *args);

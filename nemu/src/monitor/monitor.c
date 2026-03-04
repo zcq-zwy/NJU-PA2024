@@ -32,8 +32,6 @@ static void welcome() {
   Log("Build time: %s, %s", __TIME__, __DATE__);
   printf("Welcome to %s-NEMU!\n", ANSI_FMT(str(__GUEST_ISA__), ANSI_FG_YELLOW ANSI_BG_RED));
   printf("For help, type \"help\"\n");
-  Log("Exercise: Please remove me in the source code and compile NEMU again.");
-  assert(0);
 }
 
 #ifndef CONFIG_TARGET_AM
@@ -68,7 +66,7 @@ static long load_img() {
   return size;
 }
 
-static int parse_args(int argc, char *argv[]) {
+static int parse_args(int argc, char *argv[]) {    // 把命令行文本映射成 NEMU 的运行配置状态。
   const struct option table[] = {
     {"batch"    , no_argument      , NULL, 'b'},
     {"log"      , required_argument, NULL, 'l'},
@@ -76,13 +74,14 @@ static int parse_args(int argc, char *argv[]) {
     {"port"     , required_argument, NULL, 'p'},
     {"help"     , no_argument      , NULL, 'h'},
     {0          , 0                , NULL,  0 },
-  };
+  };  // 定义长选项，如 --log、--diff、--port、--batch、--help。
   int o;
-  while ( (o = getopt_long(argc, argv, "-bhl:d:p:", table, NULL)) != -1) {
-    switch (o) {
+  while ( (o = getopt_long(argc, argv, "-bhl:d:p:", table, NULL)) != -1) {  //每次返回一个选项标识（常是字符），直到返回 -1 表示解析结束
+    switch (o) {   //在分支里更新全局配置变量（日志路径、diff so 路径、端口、batch 模式等）。
       case 'b': sdb_set_batch_mode(); break;
-      case 'p': sscanf(optarg, "%d", &difftest_port); break;
-      case 'l': log_file = optarg; break;
+      case 'p': sscanf(optarg, "%d", &difftest_port); break;  //如果选项带参数（如 -l file / --log=file），值在 optarg。
+      case 'l': log_file = optarg; break;  //optarg 是 getopt/getopt_long 提供的全局变量，声明在 <unistd.h>（有些系统在 <getopt.h> 也
+     //会声明）
       case 'd': diff_so_file = optarg; break;
       case 1: img_file = optarg; return 0;
       default:
@@ -95,7 +94,7 @@ static int parse_args(int argc, char *argv[]) {
         exit(0);
     }
   }
-  return 0;
+  return 0;  //解析结束后，argv[optind] 往往就是“剩余非选项参数”（例如镜像文件路径）。
 }
 
 void init_monitor(int argc, char *argv[]) {
