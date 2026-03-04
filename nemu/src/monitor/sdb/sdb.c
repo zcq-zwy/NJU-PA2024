@@ -161,6 +161,32 @@ static int cmd_si(char *args) {
     return 0;
   }
 
+  static int cmd_p(char *args) {
+    // p 命令必须带表达式参数
+    if (args == NULL) {
+      printf("Usage: p EXPR\n");
+      return 0;
+    }
+
+    // 调用表达式求值
+    bool success = true;
+    word_t val = expr(args, &success);
+
+    // 求值失败给出提示
+    if (!success) {
+      printf("Bad expression: %s\n", args);
+      return 0;
+    }
+
+    // 按当前 ISA 位宽打印结果
+    printf("hex=" FMT_WORD
+         "  dec(u)=" MUXDEF(CONFIG_ISA64, "%" PRIu64, "%" PRIu32)
+         "  dec(s)=" MUXDEF(CONFIG_ISA64, "%" PRId64, "%" PRId32)
+         "\n",
+         val, (word_t)val, (sword_t)val);
+    return 0;
+  }
+
 static int cmd_help(char *args);
 
 static struct {
@@ -174,6 +200,7 @@ static struct {
   { "si", "Step program by N instructions (default 1)", cmd_si },
   { "info", "Print program status: info r (registers), info w (watchpoints)", cmd_info },
   { "x", "Scan memory: x N 0xADDR", cmd_x },
+  { "p", "Evaluate expression", cmd_p },
 
   /* TODO: Add more commands */
 
