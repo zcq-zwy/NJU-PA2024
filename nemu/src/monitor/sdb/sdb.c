@@ -73,6 +73,48 @@ static int cmd_si(char *args) {
     return 0;
   }
 
+  // 打印当前所有监视点信息（供 info w 调用）
+  void wp_display(void);
+
+  /**
+  命令层 -> 功能层 -> ISA实现层”：
+
+  1. cmd_info
+     在 sdb.c，负责解析用户输入 info r / info w。
+  2. wp_display
+     在 watchpoint.c，负责打印监视点列表（info w 用）。
+  3. isa_reg_display
+     在 src/isa/$ISA/reg.c，负责打印当前 ISA 的寄存器（info r 用）。
+
+  调用链：
+
+  - info r -> cmd_info() -> isa_reg_display()
+  - info w -> cmd_info() -> wp_display()
+   */
+
+   static int cmd_info(char *args) {
+    // info 命令必须带子命令：r 或 w
+    if (args == NULL) {
+      printf("Usage: info r|w\n");
+      return 0;
+    }
+
+    // info r: 打印寄存器状态（ISA 相关实现）
+    if (strcmp(args, "r") == 0) {
+      isa_reg_display();
+    }
+    // info w: 打印当前监视点列表
+    else if (strcmp(args, "w") == 0) {
+      wp_display();
+    }
+    // 其它子命令暂不支持
+    else {
+      printf("Unknown subcommand '%s'\n", args);
+    }
+
+    return 0;
+  }
+
 static int cmd_help(char *args);
 
 static struct {
@@ -84,6 +126,7 @@ static struct {
   { "c", "Continue the execution of the program", cmd_c },
   { "q", "Exit NEMU", cmd_q },
   { "si", "Step program by N instructions (default 1)", cmd_si },
+  { "info", "Print program status: info r (registers), info w (watchpoints)", cmd_info },
 
   /* TODO: Add more commands */
 

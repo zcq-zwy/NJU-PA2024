@@ -23,8 +23,19 @@ const char *regs[] = {
   "s8", "s9", "s10", "s11", "t3", "t4", "t5", "t6"
 };
 
+
 void isa_reg_display() {
-}
+    // RVE 只有 16 个通用寄存器；普通 RV32I/RV64I 是 32 个
+    int n = MUXDEF(CONFIG_RVE, 16, 32);
+
+    // 逐个打印通用寄存器：名字 + 数值
+    for (int i = 0; i < n; i++) {
+      printf("%-4s\t" FMT_WORD "\n", reg_name(i), gpr(i));
+    }
+
+    // 最后单独打印 PC
+    printf("pc  \t" FMT_WORD "\n", cpu.pc);
+  }
 
 word_t isa_reg_str2val(const char *s, bool *success) {
   return 0;
