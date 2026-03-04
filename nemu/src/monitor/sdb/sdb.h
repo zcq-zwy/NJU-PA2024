@@ -20,4 +20,7 @@
 
 word_t expr(char *e, bool *success);
 
+  // 打印当前所有监视点信息（供 info w 调用）
+void wp_display(void);
+
 #endif

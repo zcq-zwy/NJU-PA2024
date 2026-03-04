@@ -18,6 +18,7 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 #include "sdb.h"
+#include <memory/vaddr.h>
 
 static int is_batch_mode = false;
 
@@ -53,6 +54,113 @@ static int cmd_q(char *args) {
   return -1; // 让 sdb_mainloop 结束
 }
 
+static int cmd_si(char *args) {
+    // 未提供参数时，默认单步执行 1 条指令
+    uint64_t n = 1;
+
+    if (args != NULL) {
+      char *end = NULL;
+      n = strtoull(args, &end, 10);
+
+      // 参数非法（非数字、带多余字符、或为 0）时给出用法提示
+      if (end == args || (*end != '\0' && *end != '\n') || n == 0) {
+        printf("Usage: si [N]\n");
+        return 0;
+      }
+    }
+
+    // 执行 N 条指令后返回到 sdb
+    cpu_exec(n);
+    return 0;
+  }
+
+
+
+  /**
+  命令层 -> 功能层 -> ISA实现层”：
+
+  1. cmd_info
+     在 sdb.c，负责解析用户输入 info r / info w。
+  2. wp_display
+     在 watchpoint.c，负责打印监视点列表（info w 用）。
+  3. isa_reg_display
+     在 src/isa/$ISA/reg.c，负责打印当前 ISA 的寄存器（info r 用）。
+
+  调用链：
+
+  - info r -> cmd_info() -> isa_reg_display()
+  - info w -> cmd_info() -> wp_display()
+   */
+
+   static int cmd_info(char *args) {
+    // info 命令必须带子命令：r 或 w
+    if (args == NULL) {
+      printf("Usage: info r|w\n");
+      return 0;
+    }
+
+    // info r: 打印寄存器状态（ISA 相关实现）
+    if (strcmp(args, "r") == 0) {
+      isa_reg_display();
+    }
+    // info w: 打印当前监视点列表
+    else if (strcmp(args, "w") == 0) {
+      wp_display();
+    }
+    // 其它子命令暂不支持
+    else {
+      printf("Unknown subcommand '%s'\n", args);
+    }
+
+    return 0;
+  }
+
+
+  static int cmd_x(char *args) {
+    // 用法: x N 0xADDR
+    if (args == NULL) {
+      printf("Usage: x N 0xADDR\n");
+      return 0;
+    }
+
+    // 直接用 strtok 拆两个参数，避免手算指针出错
+    char *n_str = strtok(args, " ");
+    char *addr_str = strtok(NULL, " ");
+    if (n_str == NULL || addr_str == NULL) {
+      printf("Usage: x N 0xADDR\n");
+      return 0;
+    }
+
+    char *end_n = NULL;
+    unsigned long n = strtoul(n_str, &end_n, 10);
+    if (end_n == n_str || *end_n != '\0' || n == 0) {
+      printf("Invalid N: %s\n", n_str);
+      return 0;
+    }
+
+    // 简化版只接受十六进制地址
+    if (!(addr_str[0] == '0' && (addr_str[1] == 'x' || addr_str[1] == 'X'))) {
+      printf("Address must be hex like 0x80000000\n");
+      return 0;
+    }
+
+    char *end_addr = NULL;
+    vaddr_t addr = (vaddr_t)strtoul(addr_str, &end_addr, 16);
+    if (end_addr == addr_str || *end_addr != '\0') {
+      printf("Invalid address: %s\n", addr_str);
+      return 0;
+    }
+
+    // 连续输出 N 个 4-byte
+    for (unsigned long i = 0; i < n; i++) {
+      vaddr_t cur = addr + i * 4;
+      word_t data = vaddr_read(cur, 4);   // 若你想按物理地址读，改 paddr_read
+      printf(FMT_WORD ": " FMT_WORD "\n", cur, data);
+    }
+
+    return 0;
+  }
+
 static int cmd_help(char *args);
 
 static struct {
@@ -63,6 +171,9 @@ static struct {
   { "help", "Display information about all supported commands", cmd_help },
   { "c", "Continue the execution of the program", cmd_c },
   { "q", "Exit NEMU", cmd_q },
+  { "si", "Step program by N instructions (default 1)", cmd_si },
+  { "info", "Print program status: info r (registers), info w (watchpoints)", cmd_info },
+  { "x", "Scan memory: x N 0xADDR", cmd_x },
 
   /* TODO: Add more commands */
 

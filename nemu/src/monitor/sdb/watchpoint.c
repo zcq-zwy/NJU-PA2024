@@ -41,3 +41,18 @@ void init_wp_pool() {
 
 /* TODO: Implement the functionality of watchpoint */
 
+void wp_display() {
+    // 当前没有监视点
+    if (head == NULL) {
+      printf("No watchpoints.\n");
+      return;
+    }
+
+    // 线性遍历链表，逐个打印
+    WP *p = head;
+    while (p != NULL) {
+      printf("Watchpoint %d\n", p->NO);
+      p = p->next;
+    }
+  }
+
