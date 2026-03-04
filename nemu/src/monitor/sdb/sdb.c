@@ -53,6 +53,26 @@ static int cmd_q(char *args) {
   return -1; // 让 sdb_mainloop 结束
 }
 
+static int cmd_si(char *args) {
+    // 未提供参数时，默认单步执行 1 条指令
+    uint64_t n = 1;
+
+    if (args != NULL) {
+      char *end = NULL;
+      n = strtoull(args, &end, 10);
+
+      // 参数非法（非数字、带多余字符、或为 0）时给出用法提示
+      if (end == args || (*end != '\0' && *end != '\n') || n == 0) {
+        printf("Usage: si [N]\n");
+        return 0;
+      }
+    }
+
+    // 执行 N 条指令后返回到 sdb
+    cpu_exec(n);
+    return 0;
+  }
+
 static int cmd_help(char *args);
 
 static struct {
@@ -63,6 +83,7 @@ static struct {
   { "help", "Display information about all supported commands", cmd_help },
   { "c", "Continue the execution of the program", cmd_c },
   { "q", "Exit NEMU", cmd_q },
+  { "si", "Step program by N instructions (default 1)", cmd_si },
 
   /* TODO: Add more commands */
 
