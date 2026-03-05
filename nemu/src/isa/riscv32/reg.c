@@ -36,7 +36,28 @@ void isa_reg_display() {
     // 最后单独打印 PC
     printf("pc  \t" FMT_WORD "\n", cpu.pc);
   }
-
+/**
+ 注意：
+  - 这里 s 默认不带 $（通常在 expr.c 里先去掉）。
+  - 先支持 pc，再支持通用寄存器名。
+ */
 word_t isa_reg_str2val(const char *s, bool *success) {
-  return 0;
+  // 支持 pc
+    if (strcmp(s, "pc") == 0) {
+      *success = true;
+      return cpu.pc;
+    }
+
+    // 依次匹配通用寄存器名字（$0/ra/sp/...）
+    int n = MUXDEF(CONFIG_RVE, 16, 32);
+    for (int i = 0; i < n; i++) {
+      if (strcmp(s, reg_name(i)) == 0) {
+        *success = true;
+        return gpr(i);
+      }
+    }
+
+    // 没找到寄存器名
+    *success = false;
+    return 0;
 }
