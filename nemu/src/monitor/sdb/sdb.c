@@ -116,18 +116,17 @@ static int cmd_si(char *args) {
   }
 
 
-  static int cmd_x(char *args) {
-    // 用法: x N 0xADDR
+ static int cmd_x(char *args) {
+    // 用法: x N EXPR
     if (args == NULL) {
-      printf("Usage: x N 0xADDR\n");
+      printf("Usage: x N EXPR\n");
       return 0;
     }
 
-    // 直接用 strtok 拆两个参数，避免手算指针出错
+    // 第一个参数仍是 N
     char *n_str = strtok(args, " ");
-    char *addr_str = strtok(NULL, " ");
-    if (n_str == NULL || addr_str == NULL) {
-      printf("Usage: x N 0xADDR\n");
+    if (n_str == NULL) {
+      printf("Usage: x N EXPR\n");
       return 0;
     }
 
@@ -138,23 +137,30 @@ static int cmd_si(char *args) {
       return 0;
     }
 
-    // 简化版只接受十六进制地址
-    if (!(addr_str[0] == '0' && (addr_str[1] == 'x' || addr_str[1] == 'X'))) {
-      printf("Address must be hex like 0x80000000\n");
+    // 剩余整段作为表达式（允许有空格）
+    char *expr_str = strtok(NULL, "");
+    if (expr_str == NULL) {
+      printf("Usage: x N EXPR\n");
+      return 0;
+    }
+    while (*expr_str == ' ') expr_str++;
+    if (*expr_str == '\0') {
+      printf("Usage: x N EXPR\n");
       return 0;
     }
 
-    char *end_addr = NULL;
-    vaddr_t addr = (vaddr_t)strtoul(addr_str, &end_addr, 16);
-    if (end_addr == addr_str || *end_addr != '\0') {
-      printf("Invalid address: %s\n", addr_str);
+    // 用 expr() 计算起始地址
+    bool success = true;
+    vaddr_t addr = (vaddr_t)expr(expr_str, &success);
+    if (!success) {
+      printf("Bad expression: %s\n", expr_str);
       return 0;
     }
 
     // 连续输出 N 个 4-byte
     for (unsigned long i = 0; i < n; i++) {
       vaddr_t cur = addr + i * 4;
-      word_t data = vaddr_read(cur, 4);   // 若你想按物理地址读，改 paddr_read
+      word_t data = vaddr_read(cur, 4);
       printf(FMT_WORD ": " FMT_WORD "\n", cur, data);
     }
 
@@ -187,6 +193,39 @@ static int cmd_si(char *args) {
     return 0;
   }
 
+static int cmd_w(char *args) {
+    // 设置监视点：w EXPR
+    if (args == NULL) {
+      printf("Usage: w EXPR\n");
+      return 0;
+    }
+
+    if (!wp_add(args)) {
+      printf("Failed to add watchpoint.\n");
+    }
+    return 0;
+  }
+
+  static int cmd_d(char *args) {
+    // 删除监视点：d N
+    if (args == NULL) {
+      printf("Usage: d N\n");
+      return 0;
+    }
+
+    char *end = NULL;
+    long no = strtol(args, &end, 10);
+    if (end == args || (*end != '\0' && *end != '\n') || no < 0) {
+      printf("Usage: d N\n");
+      return 0;
+    }
+
+    if (!wp_del((int)no)) {
+      printf("No watchpoint number %ld\n", no);
+    }
+    return 0;
+  }
+
 static int cmd_help(char *args);
 
 static struct {
@@ -201,6 +240,8 @@ static struct {
   { "info", "Print program status: info r (registers), info w (watchpoints)", cmd_info },
   { "x", "Scan memory: x N 0xADDR", cmd_x },
   { "p", "Evaluate expression", cmd_p },
+  { "w", "Set watchpoint: w EXPR", cmd_w },
+  { "d", "Delete watchpoint: d N", cmd_d },
 
   /* TODO: Add more commands */
 

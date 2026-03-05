@@ -12,7 +12,7 @@
 *
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
-
+#include <memory/vaddr.h>
 #include <isa.h>
 
 /* We use the POSIX regex functions to process regular expressions.
@@ -27,6 +27,7 @@ enum {
     TK_DEC, TK_HEX,      // 十进制、十六进制常量
     TK_REG,              // 寄存器名，例如 $pc / $a0
     TK_NEG,   // 一元负号
+    TK_DEREF, // 一元解引用（后续扩展）
 
   /* TODO: Add more token types */
 
@@ -170,6 +171,21 @@ static bool make_token(char *e) {
       }
     }
 
+    // 二次扫描：根据上下文把 '*' 区分成乘法或解引用
+    for (int i = 0; i < nr_token; i++) {
+      if (tokens[i].type == '*') {
+        if (i == 0) {
+          tokens[i].type = TK_DEREF;
+        } else {
+          int prev = tokens[i - 1].type;
+          // 前一个不是“可作为右值结尾”的 token，则当前 * 视为解引用
+          if (!(prev == TK_DEC || prev == TK_HEX || prev == TK_REG || prev == ')')) {
+            tokens[i].type = TK_DEREF;
+          }
+        }
+      }
+    }
+
   return true;
 }
 
@@ -183,7 +199,8 @@ static int precedence(int type) {
       case '-':    return 3;
       case '*':
       case '/':    return 4;           
-      case TK_NEG: return 5;  // 高于 * /
+      case TK_NEG:
+      case TK_DEREF: return 5;  // 高于 * /
       default:     return 0;           // 非运算符
     }
   }
@@ -196,19 +213,41 @@ static int precedence(int type) {
     for (int i = p; i <= q; i++) {
       int t = tokens[i].type;
 
-      if (t == '(') { balance++; continue; }
-      if (t == ')') { balance--; continue; }
+      if (t == '(') {
+        balance++;
+        continue;
+      }
+      if (t == ')') {
+        balance--;
+        continue;
+      }
 
-      // 括号内部跳过
+      // 只在当前括号层找主运算符
       if (balance != 0) continue;
 
       int prec = precedence(t);
       if (prec == 0) continue;
 
-      // 选“最低优先级”；同优先级取最右（满足左结合）
-      if (prec <= best_prec) {
+      if (op == -1) {
         best_prec = prec;
         op = i;
+        continue;
+      }
+
+      if (prec < best_prec) {
+        best_prec = prec;
+        op = i;
+      } else if (prec == best_prec) {
+        bool cur_unary = (t == TK_NEG || t == TK_DEREF);
+        bool op_unary  = (tokens[op].type == TK_NEG || tokens[op].type == TK_DEREF);
+
+        if (cur_unary && op_unary) {
+          // 一元前缀：同优先级取最左
+          if (i < op) op = i;
+        } else {
+          // 二元运算：同优先级取最右（左结合）
+          if (i > op) op = i;
+        }
       }
     }
 
@@ -288,6 +327,12 @@ static bool check_parentheses(int p, int q) {
       if (!*success) return 0;
       return (word_t)(-(sword_t)rhs);
     }
+    if (tokens[op].type == TK_DEREF) {
+    // 解引用：先求右侧地址，再读取一个 uint32_t（4字节）
+    word_t addr = eval(op + 1, q, success);
+    if (!*success) return 0;
+    return vaddr_read((vaddr_t)addr, 4);
+  }
 
     // 递归求左右子表达式
     word_t lhs = eval(p, op - 1, success);

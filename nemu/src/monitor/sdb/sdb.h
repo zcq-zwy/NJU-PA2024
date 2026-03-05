@@ -20,7 +20,14 @@
 
 word_t expr(char *e, bool *success);
 
-  // 打印当前所有监视点信息（供 info w 调用）
+// 打印当前所有监视点信息（供 info w 调用）
 void wp_display(void);
+
+// 新建/删除监视点
+bool wp_add(const char *expr_str);
+bool wp_del(int no);
+
+  // 每执行一条指令后检查是否有监视点值变化
+bool wp_check(void);
 
 #endif

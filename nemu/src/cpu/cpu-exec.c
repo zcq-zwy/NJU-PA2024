@@ -25,6 +25,8 @@
  */
 #define MAX_INST_TO_PRINT 10
 
+
+
 CPU_state cpu = {};
 uint64_t g_nr_guest_inst = 0;
 static uint64_t g_timer = 0; // unit: us
@@ -32,12 +34,22 @@ static bool g_print_step = false;
 
 void device_update();
 
+// 监视点检查函数（在 sdb/watchpoint.c 中实现）
+bool wp_check(void);
+
 static void trace_and_difftest(Decode *_this, vaddr_t dnpc) {
 #ifdef CONFIG_ITRACE_COND
   if (ITRACE_COND) { log_write("%s\n", _this->logbuf); }
 #endif
   if (g_print_step) { IFDEF(CONFIG_ITRACE, puts(_this->logbuf)); }
   IFDEF(CONFIG_DIFFTEST, difftest_step(_this->pc, dnpc));
+  // 开启 CONFIG_WATCHPOINT 时才检查监视点，避免不必要性能开销
+  IFDEF(CONFIG_WATCHPOINT, {
+      if (wp_check()) {
+        // 监视点命中后暂停执行，返回到 sdb
+        nemu_state.state = NEMU_STOP;
+      }
+    });
 }
 
 static void exec_once(Decode *s, vaddr_t pc) {
