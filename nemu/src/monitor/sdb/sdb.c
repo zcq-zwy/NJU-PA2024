@@ -193,6 +193,39 @@ static int cmd_si(char *args) {
     return 0;
   }
 
+static int cmd_w(char *args) {
+    // 设置监视点：w EXPR
+    if (args == NULL) {
+      printf("Usage: w EXPR\n");
+      return 0;
+    }
+
+    if (!wp_add(args)) {
+      printf("Failed to add watchpoint.\n");
+    }
+    return 0;
+  }
+
+  static int cmd_d(char *args) {
+    // 删除监视点：d N
+    if (args == NULL) {
+      printf("Usage: d N\n");
+      return 0;
+    }
+
+    char *end = NULL;
+    long no = strtol(args, &end, 10);
+    if (end == args || (*end != '\0' && *end != '\n') || no < 0) {
+      printf("Usage: d N\n");
+      return 0;
+    }
+
+    if (!wp_del((int)no)) {
+      printf("No watchpoint number %ld\n", no);
+    }
+    return 0;
+  }
+
 static int cmd_help(char *args);
 
 static struct {
@@ -207,6 +240,8 @@ static struct {
   { "info", "Print program status: info r (registers), info w (watchpoints)", cmd_info },
   { "x", "Scan memory: x N 0xADDR", cmd_x },
   { "p", "Evaluate expression", cmd_p },
+  { "w", "Set watchpoint: w EXPR", cmd_w },
+  { "d", "Delete watchpoint: d N", cmd_d },
 
   /* TODO: Add more commands */
 
