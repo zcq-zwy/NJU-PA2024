@@ -183,6 +183,19 @@ config WATCHPOINT
   help
     Enable checking watchpoints after each executed instruction.
 
+config LOOP_DETECT
+  bool "Enable possible infinite-loop detection"
+  default n
+  help
+    Detect short-period busy loops in cpu_exec() and stop execution with a hint.
+
+config LOOP_DETECT_THRESH
+  depends on LOOP_DETECT
+  int "Loop repeat threshold"
+  default 100000
+  help
+    Stop execution when a short-period PC loop repeats this many times.
+
 choice
   prompt "Reference design"
   default DIFFTEST_REF_SPIKE if ISA_riscv

@@ -44,6 +44,55 @@ static int iringbuf_count = 0;
 // 最近一次写入的槽位索引，用于输出时打箭头标记。
 static int iringbuf_latest = -1;
 
+#ifdef CONFIG_LOOP_DETECT
+// 死循环检测窗口：仅检测短周期循环（周期 1~4），覆盖常见 busy loop。
+#define LOOP_PERIOD_MAX 4
+#define LOOP_HIST_LEN (LOOP_PERIOD_MAX * 2)
+
+static vaddr_t loop_hist[LOOP_HIST_LEN] = {};
+static int loop_hist_cnt = 0;
+static int loop_period = 0;
+static uint64_t loop_repeat_cnt = 0;
+
+static bool loop_detect_update(vaddr_t pc) {
+  // 维护最近 LOOP_HIST_LEN 条 PC 历史。
+  if (loop_hist_cnt < LOOP_HIST_LEN) {
+    loop_hist[loop_hist_cnt++] = pc;
+  } else {
+    memmove(loop_hist, loop_hist + 1, (LOOP_HIST_LEN - 1) * sizeof(loop_hist[0]));
+    loop_hist[LOOP_HIST_LEN - 1] = pc;
+  }
+
+  int matched_period = 0;
+  for (int p = 1; p <= LOOP_PERIOD_MAX; p++) {
+    if (loop_hist_cnt < p * 2) continue;
+    bool same = true;
+    for (int i = 0; i < p; i++) {
+      if (loop_hist[loop_hist_cnt - 1 - i] != loop_hist[loop_hist_cnt - 1 - p - i]) {
+        same = false;
+        break;
+      }
+    }
+    if (same) {
+      matched_period = p;
+      break;
+    }
+  }
+
+  if (matched_period != 0) {
+    if (loop_period == matched_period) loop_repeat_cnt++;
+    else {
+      loop_period = matched_period;
+      loop_repeat_cnt = 1;
+    }
+  } else {
+    loop_period = 0;
+    loop_repeat_cnt = 0;
+  }
+  return loop_repeat_cnt >= CONFIG_LOOP_DETECT_THRESH;
+}
+#endif
+
 void device_update();
 
 // 监视点检查函数（在 sdb/watchpoint.c 中实现）
@@ -139,6 +188,18 @@ static void execute(uint64_t n) {
     trace_and_difftest(&s, cpu.pc);
     if (nemu_state.state != NEMU_RUNNING) break;
     IFDEF(CONFIG_DEVICE, device_update());
+
+    IFDEF(CONFIG_LOOP_DETECT, {
+      if (loop_detect_update(s.pc)) {
+        Log("possible infinite loop detected at pc = " FMT_WORD
+            ", period = %d, repeat = %" PRIu64,
+            s.pc, loop_period, loop_repeat_cnt);
+        Log("execution is paused. Use 'c' to continue or inspect state in sdb.");
+        iringbuf_display();
+        nemu_state.state = NEMU_STOP;
+        break;
+      }
+    });
   }
 }
 
@@ -167,6 +228,14 @@ void cpu_exec(uint64_t n) {
       return;
     default: nemu_state.state = NEMU_RUNNING;
   }
+
+  IFDEF(CONFIG_LOOP_DETECT, {
+    // 每次进入 cpu_exec 都重置统计，避免跨次执行互相污染。
+    loop_hist_cnt = 0;
+    loop_period = 0;
+    loop_repeat_cnt = 0;
+    memset(loop_hist, 0, sizeof(loop_hist));
+  });
 
   uint64_t timer_start = get_time();
 
