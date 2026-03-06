@@ -170,6 +170,20 @@ config MTRACE_COND
     You may use symbols such as: addr, len, data, is_write.
     Example: !is_write && addr >= 0x80000000 && addr < 0x80001000
 
+config DTRACE
+  depends on TRACE && TARGET_NATIVE_ELF && MODE_SYSTEM && DEVICE
+  bool "Enable device access tracer"
+  default n
+
+config DTRACE_COND
+  depends on DTRACE
+  string "Only trace device accesses when the condition is true"
+  default "true"
+  help
+    The condition is compiled as a C expression in map_read/map_write.
+    You may use symbols such as: addr, len, data, is_write, map_name.
+    Example: !is_write && map_name && addr >= 0xa0000000
+
 config DIFFTEST
   depends on TARGET_NATIVE_ELF
   bool "Enable differential testing"

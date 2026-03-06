@@ -36,13 +36,15 @@ static uint64_t g_timer = 0; // unit: us
 static bool g_print_step = false;
 
 // 环形缓冲区本体：用于记录“最近执行过的指令字符串”。
+#ifdef CONFIG_TRACE
 static char iringbuf[IRINGBUF_SIZE][IRINGBUF_LINE_LEN];
-// 下一个写入位置（始终指向可写槽位）。
+// ??????????????????
 static int iringbuf_head = 0;
-// 当前已保存的有效条目数（<= IRINGBUF_SIZE）。
+// ????????????<= IRINGBUF_SIZE??
 static int iringbuf_count = 0;
-// 最近一次写入的槽位索引，用于输出时打箭头标记。
+// ???????????????????????
 static int iringbuf_latest = -1;
+#endif
 
 #ifdef CONFIG_LOOP_DETECT
 // 死循环检测窗口：仅检测短周期循环（周期 1~4），覆盖常见 busy loop。
@@ -102,6 +104,7 @@ bool wp_check(void);
 // - 开启 ITRACE 时直接复用反汇编字符串；
 // - 未开启 ITRACE 时退化为“pc + 原始机器码”的简要信息。
 static void iringbuf_record(Decode *s) {
+#ifdef CONFIG_TRACE
 #ifdef CONFIG_ITRACE
   snprintf(iringbuf[iringbuf_head], IRINGBUF_LINE_LEN, "%s", s->logbuf);
 #else
@@ -112,10 +115,14 @@ static void iringbuf_record(Decode *s) {
   iringbuf_latest = iringbuf_head;
   iringbuf_head = (iringbuf_head + 1) % IRINGBUF_SIZE;
   if (iringbuf_count < IRINGBUF_SIZE) iringbuf_count++;
+#else
+  (void)s;
+#endif
 }
 
-// 按“最老 -> 最新”的顺序打印 iringbuf，最新一条前缀为 "-->"。
+// Print iringbuf from oldest to newest; the latest one is prefixed with "-->".
 static void iringbuf_display(void) {
+#ifdef CONFIG_TRACE
   if (iringbuf_count == 0) {
     Log("iringbuf is empty");
     return;
@@ -127,6 +134,7 @@ static void iringbuf_display(void) {
     int idx = (start + i) % IRINGBUF_SIZE;
     Log("%s %s", (idx == iringbuf_latest ? "-->" : "   "), iringbuf[idx]);
   }
+#endif
 }
 
 static void trace_and_difftest(Decode *_this, vaddr_t dnpc) {
