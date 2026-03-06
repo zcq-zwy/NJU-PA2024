@@ -151,6 +151,11 @@ config ITRACE_COND
   string "Only trace instructions when the condition is true"
   default "true"
 
+config FTRACE
+  depends on TRACE && TARGET_NATIVE_ELF && ISA_riscv
+  bool "Enable function tracer"
+  default n
+
 config MTRACE
   depends on TRACE && TARGET_NATIVE_ELF && MODE_SYSTEM
   bool "Enable memory access tracer"
