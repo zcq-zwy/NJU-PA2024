@@ -51,14 +51,50 @@ void init_mem() {
 }
 
 word_t paddr_read(paddr_t addr, int len) {
-  if (likely(in_pmem(addr))) return pmem_read(addr, len);
-  IFDEF(CONFIG_DEVICE, return mmio_read(addr, len));
-  out_of_bound(addr);
-  return 0;
+  word_t data = 0;
+  if (likely(in_pmem(addr))) {
+    data = pmem_read(addr, len);
+  }
+#ifdef CONFIG_DEVICE
+  else {
+    data = mmio_read(addr, len);
+  }
+#else
+  else {
+    out_of_bound(addr);
+  }
+#endif
+
+  IFDEF(CONFIG_MTRACE, {
+    bool is_write = false;
+    if (MTRACE_COND) {
+      log_write("mtrace R addr=" FMT_PADDR " len=%d data=" FMT_WORD "\n", addr, len, data);
+    }
+    (void)is_write;
+  });
+
+  return data;
 }
 
 void paddr_write(paddr_t addr, int len, word_t data) {
-  if (likely(in_pmem(addr))) { pmem_write(addr, len, data); return; }
-  IFDEF(CONFIG_DEVICE, mmio_write(addr, len, data); return);
-  out_of_bound(addr);
+  if (likely(in_pmem(addr))) {
+    pmem_write(addr, len, data);
+  }
+#ifdef CONFIG_DEVICE
+  else {
+    mmio_write(addr, len, data);
+  }
+#else
+  else {
+    out_of_bound(addr);
+  }
+#endif
+
+  IFDEF(CONFIG_MTRACE, {
+    bool is_write = true;
+    if (MTRACE_COND) {
+      log_write("mtrace W addr=" FMT_PADDR " len=%d data=" FMT_WORD "\n", addr, len, data);
+    }
+    (void)is_write;
+  });
 }
