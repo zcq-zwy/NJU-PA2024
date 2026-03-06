@@ -118,6 +118,11 @@ static int decode_exec(Decode *s) {
   INSTPAT("0000001 ????? ????? 111 ????? 01100 11", remu  , R, R(rd) = (src2 == 0) ? src1 : (src1 % src2));
 
   INSTPAT("0000000 00001 00000 000 00000 11100 11", ebreak, N, NEMUTRAP(s->pc, R(10)));
+  // fence: for single-core in-order NEMU, treat as no-op
+  INSTPAT("??????? ????? 00000 000 00000 00011 11", fence  , I, );
+  // fence.i: also no-op in this simplified model
+  INSTPAT("0000000 00000 00000 001 00000 00011 11", fence_i, N, );
+  // inv 是全通配兜底，放在前面会把后面的指令全吞掉
   INSTPAT("??????? ????? ????? ??? ????? ????? ??", inv   , N, INV(s->pc));
   INSTPAT_END();
 
