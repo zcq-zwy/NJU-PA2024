@@ -53,6 +53,10 @@ void do_syscall(Context *c) {
         Log("strace: syscall write -> ret=%d", c->GPRx);
       }
       break;
+    case SYS_brk:
+      c->GPRx = 0;
+      Log("strace: syscall brk -> ret=%d", c->GPRx);
+      break;
     default:
       panic("Unhandled syscall ID = %d", a[0]);
   }

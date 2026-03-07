@@ -1,5 +1,6 @@
 #include <unistd.h>
 #include <stdint.h>
+#include <errno.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <assert.h>
@@ -70,8 +71,24 @@ int _write(int fd, void *buf, size_t count) {
   return _syscall_(SYS_write, fd, (intptr_t)buf, count);
 }
 
+extern char _end;
+
 void *_sbrk(intptr_t increment) {
-  return (void *)-1;
+  static char *program_break = NULL;
+  if (program_break == NULL) {
+    program_break = &_end;
+  }
+
+  char *old_break = program_break;
+  char *new_break = old_break + increment;
+
+  if (_syscall_(SYS_brk, (intptr_t)new_break, 0, 0) != 0) {
+    errno = ENOMEM;
+    return (void *)-1;
+  }
+
+  program_break = new_break;
+  return old_break;
 }
 
 int _read(int fd, void *buf, size_t count) {
