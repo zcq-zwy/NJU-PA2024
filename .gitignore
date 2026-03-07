@@ -1,15 +1,17 @@
 *.*
-  *
-  !*/
-  !/nemu/**
-  !/nexus-am/**
-  !/nanos-lite/**
-  !/navy-apps/**
-  !/am-kernels/
-  !/am-kernels/**
-  !/fceux-am/
-  !/fceux-am/**
-  !Makefile
-  !README.md
-  !.gitignore
-  !init.sh
+*
+!*/
+!/nemu/**
+!/nexus-am/**
+!/nanos-lite/**
+!/navy-apps/**
+!/am-kernels/
+!/am-kernels/**
+!/fceux-am/
+!/fceux-am/**
+!Makefile
+!README.md
+!.gitignore
+!init.sh
+/riscv-arch-test-am/
+/riscv-tests/
