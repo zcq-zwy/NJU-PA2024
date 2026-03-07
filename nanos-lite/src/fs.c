@@ -12,7 +12,7 @@ typedef struct {
   size_t open_offset;
 } Finfo;
 
-enum {FD_STDIN, FD_STDOUT, FD_STDERR, FD_FB};
+enum {FD_STDIN, FD_STDOUT, FD_STDERR, FD_EVENTS, FD_DISPINFO, FD_FB};
 
 size_t serial_write(const void *buf, size_t offset, size_t len);
 size_t events_read(void *buf, size_t offset, size_t len);
@@ -32,13 +32,18 @@ static size_t invalid_write(const void *buf, size_t offset, size_t len) {
 }
 
 static Finfo file_table[] __attribute__((used)) = {
-  [FD_STDIN]  = {"stdin",  0, 0, invalid_read,  invalid_write, 0},
-  [FD_STDOUT] = {"stdout", 0, 0, NULL,          serial_write,  0},
-  [FD_STDERR] = {"stderr", 0, 0, NULL,          serial_write,  0},
+  [FD_STDIN]    = {"stdin",          0, 0, invalid_read, invalid_write, 0},
+  [FD_STDOUT]   = {"stdout",         0, 0, NULL,         serial_write,  0},
+  [FD_STDERR]   = {"stderr",         0, 0, NULL,         serial_write,  0},
+  [FD_EVENTS]   = {"/dev/events",    0, 0, events_read,  invalid_write, 0},
+  [FD_DISPINFO] = {"/proc/dispinfo", 0, 0, dispinfo_read,invalid_write, 0},
+  [FD_FB]       = {"/dev/fb",        0, 0, invalid_read, fb_write,      0},
 #include "files.h"
 };
 
 void init_fs() {
+  AM_GPU_CONFIG_T gpu = io_read(AM_GPU_CONFIG);
+  file_table[FD_FB].size = gpu.vmemsz;
 }
 
 int fs_open(const char *pathname, int flags, int mode) {
@@ -58,13 +63,13 @@ int fs_open(const char *pathname, int flags, int mode) {
 
 size_t fs_read(int fd, void *buf, size_t len) {
   Finfo *f = &file_table[fd];
-  size_t remain = (f->size > f->open_offset ? f->size - f->open_offset : 0);
-  if (len > remain) len = remain;
 
   size_t ret = 0;
   if (f->read != NULL) {
     ret = f->read(buf, f->open_offset, len);
   } else {
+    size_t remain = (f->size > f->open_offset ? f->size - f->open_offset : 0);
+    if (len > remain) len = remain;
     ret = ramdisk_read(buf, f->disk_offset + f->open_offset, len);
   }
   f->open_offset += ret;
@@ -103,4 +108,9 @@ size_t fs_lseek(int fd, size_t offset, int whence) {
 int fs_close(int fd) {
   file_table[fd].open_offset = 0;
   return 0;
+}
+
+const char *fs_get_filename(int fd) {
+  if (fd < 0 || fd >= LENGTH(file_table)) return "invalid-fd";
+  return file_table[fd].name;
 }
