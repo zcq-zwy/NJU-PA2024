@@ -1,14 +1,15 @@
 *.*
-*
-!*/
-!/nemu/*
-!/nexus-am/*
-!/nanos-lite/*
-!/navy-apps/*
-!/am-kernels/
-!/am-kernels/**
-!Makefile
-!README.md
-!.gitignore
-!init.sh
-/fceux-am
+  *
+  !*/
+  !/nemu/**
+  !/nexus-am/**
+  !/nanos-lite/**
+  !/navy-apps/**
+  !/am-kernels/
+  !/am-kernels/**
+  !/fceux-am/
+  !/fceux-am/**
+  !Makefile
+  !README.md
+  !.gitignore
+  !init.sh
