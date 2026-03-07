@@ -4,15 +4,28 @@
 
 static Context* (*user_handler)(Event, Context*) = NULL;
 
+void __am_get_cur_as(Context *c);
+void __am_switch(Context *c);
+
 Context* __am_irq_handle(Context *c) {
   if (user_handler) {
+    __am_get_cur_as(c);
+
     Event ev = {0};
     switch (c->mcause) {
-      default: ev.event = EVENT_ERROR; break;
+      case 11:
+        c->mepc += 4;
+        ev.event = (c->GPR1 == (uintptr_t)-1 ? EVENT_YIELD : EVENT_SYSCALL);
+        break;
+      default:
+        ev.event = EVENT_ERROR;
+        ev.cause = c->mcause;
+        break;
     }
 
     c = user_handler(ev, c);
     assert(c != NULL);
+    __am_switch(c);
   }
 
   return c;

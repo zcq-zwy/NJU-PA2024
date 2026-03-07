@@ -76,6 +76,8 @@ typedef struct {
       };
     };
     vaddr_t pc;
+    uint16_t cs;
+    uint32_t eflags;
   } x86_CPU_state;
 
 // decode

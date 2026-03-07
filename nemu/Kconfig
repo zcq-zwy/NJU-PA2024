@@ -156,6 +156,11 @@ config FTRACE
   bool "Enable function tracer"
   default n
 
+config ETRACE
+  depends on TRACE && TARGET_NATIVE_ELF && MODE_SYSTEM
+  bool "Enable exception tracer"
+  default n
+
 config MTRACE
   depends on TRACE && TARGET_NATIVE_ELF && MODE_SYSTEM
   bool "Enable memory access tracer"

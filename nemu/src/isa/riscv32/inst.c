@@ -53,6 +53,16 @@ static void decode_operand(Decode *s, int *rd, word_t *src1, word_t *src2, word_
   }
 }
 
+static word_t *csr(uint32_t addr) {
+  switch (addr) {
+    case 0x300: return &cpu.mstatus;
+    case 0x305: return &cpu.mtvec;
+    case 0x341: return &cpu.mepc;
+    case 0x342: return &cpu.mcause;
+    default: panic("unsupported CSR = 0x%x", addr);
+  }
+}
+
 static int decode_exec(Decode *s) {
   s->dnpc = s->snpc;
 
@@ -118,7 +128,11 @@ static int decode_exec(Decode *s) {
   INSTPAT("0000001 ????? ????? 110 ????? 01100 11", rem   , R, if ((sword_t)src2 == 0) R(rd) = src1; else if ((sword_t)src1 == (sword_t)0x80000000 && (sword_t)src2 == -1) R(rd) = 0; else R(rd) = (sword_t)src1 % (sword_t)src2);
   INSTPAT("0000001 ????? ????? 111 ????? 01100 11", remu  , R, R(rd) = (src2 == 0) ? src1 : (src1 % src2));
 
+  INSTPAT("0000000 00000 00000 000 00000 11100 11", ecall , N, s->dnpc = isa_raise_intr(11, s->pc));
   INSTPAT("0000000 00001 00000 000 00000 11100 11", ebreak, N, NEMUTRAP(s->pc, R(10)));
+  INSTPAT("0011000 00010 00000 000 00000 11100 11", mret  , N, s->dnpc = cpu.mepc);
+  INSTPAT("??????? ????? ????? 001 ????? 11100 11", csrrw , I, word_t *p = csr(BITS(s->isa.inst, 31, 20)); word_t t = *p; *p = src1; R(rd) = t);
+  INSTPAT("??????? ????? ????? 010 ????? 11100 11", csrrs , I, word_t *p = csr(BITS(s->isa.inst, 31, 20)); word_t t = *p; if (BITS(s->isa.inst, 19, 15) != 0) *p = t | src1; R(rd) = t);
   // fence: for single-core in-order NEMU, treat as no-op
   INSTPAT("??????? ????? 00000 000 00000 00011 11", fence  , I, );
   // fence.i: also no-op in this simplified model
