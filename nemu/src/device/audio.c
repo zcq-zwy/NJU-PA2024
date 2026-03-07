@@ -19,6 +19,9 @@ static uint32_t sbuf_rpos = 0;
 static uint32_t sbuf_count = 0;
 static bool audio_started = false;
 
+static bool audio_need_prefill = true;
+static uint32_t audio_prefill_bytes = 0;
+
 static uint64_t underflow_events = 0;
 static uint64_t underflow_bytes = 0;
 static uint32_t last_underflow_report_ms = 0;
@@ -41,6 +44,17 @@ static void audio_callback(void *userdata, uint8_t *stream, int len) {
   if (len <= 0) return;
 
   uint32_t req = (uint32_t)len;
+
+  // Recover from underrun by waiting until enough data is queued.
+  if (audio_need_prefill) {
+    if (sbuf_count < audio_prefill_bytes) {
+      memset(stream, 0, req);
+      audio_base[reg_count] = sbuf_count;
+      return;
+    }
+    audio_need_prefill = false;
+  }
+
   uint32_t nread = u32_min(sbuf_count, req);
   uint32_t sbuf_size = audio_base[reg_sbuf_size];
 
@@ -57,13 +71,14 @@ static void audio_callback(void *userdata, uint8_t *stream, int len) {
     uint32_t miss = req - nread;
     underflow_events++;
     underflow_bytes += miss;
+    audio_need_prefill = true;
     memset(stream + nread, 0, miss);
 
     uint32_t now = SDL_GetTicks();
     if (now - last_underflow_report_ms >= 5000) {
       last_underflow_report_ms = now;
-      Log("audio underflow: events=%" PRIu64 ", bytes=%" PRIu64 ", sbuf_count=%u, req=%d, got=%d",
-          underflow_events, underflow_bytes, sbuf_count, len, (int)nread);
+      Log("audio underflow: events=%" PRIu64 ", bytes=%" PRIu64 ", sbuf_count=%u, req=%d, got=%d, prefill=%u",
+          underflow_events, underflow_bytes, sbuf_count, len, (int)nread, audio_prefill_bytes);
     }
   }
 
@@ -74,35 +89,68 @@ static void audio_callback(void *userdata, uint8_t *stream, int len) {
 static void audio_start() {
   if (audio_started) return;
 
-  SDL_AudioSpec s = {};
-  s.freq = audio_base[reg_freq];
-  s.format = AUDIO_S16SYS;
-  s.channels = audio_base[reg_channels];
-  s.samples = audio_base[reg_samples];
-  s.callback = audio_callback;
-  s.userdata = NULL;
+  SDL_AudioSpec want = {};
+  want.freq = audio_base[reg_freq];
+  want.format = AUDIO_S16SYS;
+  want.channels = audio_base[reg_channels];
+  want.samples = audio_base[reg_samples];
+  if (want.samples < 2048) want.samples = 2048;
+  want.callback = audio_callback;
+  want.userdata = NULL;
 
-  if (s.freq == 0 || s.channels == 0 || s.samples == 0) {
+  if (want.freq == 0 || want.channels == 0 || want.samples == 0) {
+    audio_base[reg_init] = 0;
     return;
   }
 
   if (SDL_InitSubSystem(SDL_INIT_AUDIO) != 0) {
     Log("audio: SDL_InitSubSystem failed: %s", SDL_GetError());
+    audio_base[reg_init] = 0;
     return;
   }
 
-  if (SDL_OpenAudio(&s, NULL) != 0) {
+  SDL_AudioSpec have = {};
+  if (SDL_OpenAudio(&want, &have) != 0) {
     Log("audio: SDL_OpenAudio failed: %s", SDL_GetError());
+    audio_base[reg_init] = 0;
     return;
   }
+
+  if (have.format != AUDIO_S16SYS) {
+    Log("audio: host format 0x%x != AUDIO_S16SYS(0x%x), may cause distortion", have.format, AUDIO_S16SYS);
+  }
+  if (have.channels != want.channels || have.freq != want.freq) {
+    Log("audio: host spec differs (want %uHz/%uch, have %dHz/%uch)",
+        want.freq, want.channels, have.freq, have.channels);
+  }
+
+  uint32_t cap = audio_base[reg_sbuf_size];
+  uint32_t period_bytes = have.size;
+  if (period_bytes == 0) {
+    period_bytes = have.samples * have.channels * (uint32_t)sizeof(int16_t);
+  }
+  if (period_bytes == 0) period_bytes = 4096;
+
+  uint64_t target = (uint64_t)period_bytes * 4;
+  if (target < 8192) target = 8192;
+  uint32_t cap_half = cap / 2;
+  if (cap_half > 0 && target > cap_half) target = cap_half;
+  if (target > cap) target = cap;
+  if (target == 0) target = period_bytes;
+
+  audio_prefill_bytes = (uint32_t)target;
+  audio_need_prefill = true;
 
   SDL_PauseAudio(0);
   audio_started = true;
+  audio_base[reg_init] = 1;
   underflow_events = 0;
   underflow_bytes = 0;
   last_underflow_report_ms = SDL_GetTicks();
-  Log("audio: started (freq=%u, channels=%u, samples=%u)",
-      audio_base[reg_freq], audio_base[reg_channels], audio_base[reg_samples]);
+  Log("audio: started (want=%uHz/%uch/%usmp, have=%dHz/%uch/%usmp, prefill=%u)",
+      want.freq, want.channels, want.samples,
+      have.freq, have.channels, have.samples,
+      audio_prefill_bytes);
 }
 
 static void audio_io_handler(uint32_t offset, int len, bool is_write) {
@@ -116,6 +164,7 @@ static void audio_io_handler(uint32_t offset, int len, bool is_write) {
         audio_lock_if_started();
         sbuf_rpos = 0;
         sbuf_count = 0;
+        audio_need_prefill = true;
         audio_base[reg_count] = 0;
         audio_unlock_if_started();
         audio_start();
@@ -123,6 +172,11 @@ static void audio_io_handler(uint32_t offset, int len, bool is_write) {
       break;
 
     case reg_count:
+      if (!audio_started) {
+        audio_base[reg_count] = 0;
+        break;
+      }
+
       audio_lock_if_started();
       if (is_write) {
         uint32_t req = audio_base[reg_count];
@@ -153,9 +207,10 @@ void init_audio() {
 
 #ifdef CONFIG_HAS_PORT_IO
   add_pio_map("audio", CONFIG_AUDIO_CTL_PORT, audio_base, space_size, audio_io_handler);
-  add_pio_map("audio-sbuf", CONFIG_SB_ADDR, sbuf, CONFIG_SB_SIZE, NULL);
 #else
   add_mmio_map("audio", CONFIG_AUDIO_CTL_MMIO, audio_base, space_size, audio_io_handler);
-  add_mmio_map("audio-sbuf", CONFIG_SB_ADDR, sbuf, CONFIG_SB_SIZE, NULL);
 #endif
+
+  // Audio stream payload is always mapped at MMIO AUDIO_SBUF_ADDR.
+  add_mmio_map("audio-sbuf", CONFIG_SB_ADDR, sbuf, CONFIG_SB_SIZE, NULL);
 }
