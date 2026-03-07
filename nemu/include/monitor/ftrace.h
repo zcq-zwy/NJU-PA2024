@@ -3,7 +3,7 @@
 
 #include <common.h>
 
-void init_ftrace(const char *elf_file);
+void init_ftrace(int elf_count, char *elf_files[]);
 void ftrace_call(vaddr_t pc, vaddr_t target);
 void ftrace_ret(vaddr_t pc, vaddr_t target);
 

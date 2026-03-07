@@ -43,7 +43,9 @@ void sdb_set_batch_mode();
 static char *log_file = NULL;
 static char *diff_so_file = NULL;
 static char *img_file = NULL;
-static char *elf_file = NULL;
+#define MAX_FTRACE_ELF 16
+static char *elf_files[MAX_FTRACE_ELF] = {};
+static int elf_count = 0;
 static int difftest_port = 1234;
 
 static long load_img() {
@@ -86,7 +88,7 @@ static int parse_args(int argc, char *argv[]) {    // 把命令行文本映射�
       case 'l': log_file = optarg; break;  //optarg 是 getopt/getopt_long 提供的全局变量，声明在 <unistd.h>（有些系统在 <getopt.h> 也
      //会声明）
       case 'd': diff_so_file = optarg; break;
-      case 'f': elf_file = optarg; break;
+      case 'f': Assert(elf_count < MAX_FTRACE_ELF, "too many --elf options (max %d)", MAX_FTRACE_ELF); elf_files[elf_count++] = optarg; break;
       case 1: img_file = optarg; return 0;
       default:
         printf("Usage: %s [OPTION...] IMAGE [args]\n\n", argv[0]);
@@ -130,7 +132,7 @@ void init_monitor(int argc, char *argv[]) {
   init_difftest(diff_so_file, img_size, difftest_port);
 
   /* Initialize ftrace symbols from ELF (if enabled and provided). */
-  init_ftrace(elf_file);
+  init_ftrace(elf_count, elf_files);
 
   /* Initialize the simple debugger. */
   init_sdb();
