@@ -7,6 +7,7 @@
 #define SCR_W       256
 #define SCR_H       240
 #define FRAME_SKIP    1
+#define AGGRESSIVE_PPU_HALF_RES 0
 
 void fce_update_screen();
 int fce_load_rom(char *rom);

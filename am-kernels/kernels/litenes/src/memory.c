@@ -9,7 +9,7 @@ byte memory_readb(word address) {
     case 1: return ppuio_read(address);
     case 2: return psgio_read(address);
     case 3: return cpu_ram_read(address & 0x1FFF);
-    default: return mmc_read(address);
+    default: return memory[address];
   }
 }
 

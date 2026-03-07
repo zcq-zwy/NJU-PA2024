@@ -11,7 +11,7 @@ static inline byte mem_fast_readb(word address) {
     case 1: return ppuio_read(address);
     case 2: return psgio_read(address);
     case 3: return CPU_RAM[address & 0x07FF];
-    default: return mmc_read(address);
+    default: return memory[address];
   }
 }
 
@@ -671,9 +671,269 @@ unsigned long long cpu_clock() {
 
 void cpu_run(long cycles) {
   cycles /= 3;
+  int used;
+
+#if defined(__GNUC__)
+  static void *cpu_dispatch[256] = {
+    [0 ... 255] = &&op_slow,
+    [0xA9] = &&op_fast_imm_load, [0xA2] = &&op_fast_imm_load, [0xA0] = &&op_fast_imm_load,
+    [0x09] = &&op_fast_imm_ops, [0x29] = &&op_fast_imm_ops, [0x49] = &&op_fast_imm_ops,
+    [0x69] = &&op_fast_imm_ops, [0xE9] = &&op_fast_imm_ops, [0xC9] = &&op_fast_imm_ops,
+    [0xE0] = &&op_fast_imm_ops, [0xC0] = &&op_fast_imm_ops,
+    [0xA5] = &&op_fast_zp_ops, [0xA6] = &&op_fast_zp_ops, [0xA4] = &&op_fast_zp_ops,
+    [0xB5] = &&op_fast_zp_ops, [0xB4] = &&op_fast_zp_ops, [0xB6] = &&op_fast_zp_ops,
+    [0x05] = &&op_fast_zp_ops, [0x25] = &&op_fast_zp_ops, [0x45] = &&op_fast_zp_ops,
+    [0x15] = &&op_fast_zp_ops, [0x35] = &&op_fast_zp_ops, [0x55] = &&op_fast_zp_ops,
+    [0x65] = &&op_fast_zp_ops, [0x75] = &&op_fast_zp_ops, [0xE5] = &&op_fast_zp_ops,
+    [0xF5] = &&op_fast_zp_ops, [0xC5] = &&op_fast_zp_ops, [0xD5] = &&op_fast_zp_ops,
+    [0xE4] = &&op_fast_zp_ops, [0xC4] = &&op_fast_zp_ops, [0x24] = &&op_fast_zp_ops,
+    [0x85] = &&op_fast_zp_ops, [0x86] = &&op_fast_zp_ops, [0x84] = &&op_fast_zp_ops,
+    [0x95] = &&op_fast_zp_ops, [0x94] = &&op_fast_zp_ops, [0x96] = &&op_fast_zp_ops,
+    [0xAD] = &&op_fast_abs_ops, [0xAE] = &&op_fast_abs_ops, [0xAC] = &&op_fast_abs_ops,
+    [0xBD] = &&op_fast_abs_ops, [0xB9] = &&op_fast_abs_ops, [0xBC] = &&op_fast_abs_ops,
+    [0xBE] = &&op_fast_abs_ops, [0x0D] = &&op_fast_abs_ops, [0x1D] = &&op_fast_abs_ops,
+    [0x19] = &&op_fast_abs_ops, [0x2D] = &&op_fast_abs_ops, [0x3D] = &&op_fast_abs_ops,
+    [0x39] = &&op_fast_abs_ops, [0x4D] = &&op_fast_abs_ops, [0x5D] = &&op_fast_abs_ops,
+    [0x59] = &&op_fast_abs_ops, [0x6D] = &&op_fast_abs_ops, [0x7D] = &&op_fast_abs_ops,
+    [0x79] = &&op_fast_abs_ops, [0xFD] = &&op_fast_abs_ops, [0xF9] = &&op_fast_abs_ops,
+    [0xCD] = &&op_fast_abs_ops, [0xDD] = &&op_fast_abs_ops, [0xD9] = &&op_fast_abs_ops,
+    [0xEC] = &&op_fast_abs_ops, [0xCC] = &&op_fast_abs_ops, [0x2C] = &&op_fast_abs_ops,
+    [0x8D] = &&op_fast_abs_ops, [0x8E] = &&op_fast_abs_ops, [0x8C] = &&op_fast_abs_ops,
+    [0x99] = &&op_fast_abs_ops, [0x9D] = &&op_fast_abs_ops,
+    [0xA1] = &&op_fast_indx_ops, [0x01] = &&op_fast_indx_ops, [0x21] = &&op_fast_indx_ops,
+    [0x41] = &&op_fast_indx_ops, [0x61] = &&op_fast_indx_ops, [0xE1] = &&op_fast_indx_ops,
+    [0xC1] = &&op_fast_indx_ops, [0x81] = &&op_fast_indx_ops,
+    [0xB1] = &&op_fast_indy_ops, [0x11] = &&op_fast_indy_ops, [0x31] = &&op_fast_indy_ops,
+    [0x51] = &&op_fast_indy_ops, [0x71] = &&op_fast_indy_ops, [0xF1] = &&op_fast_indy_ops,
+    [0xD1] = &&op_fast_indy_ops, [0x91] = &&op_fast_indy_ops,
+    [0xAA] = &&op_fast_transfer_ops, [0x8A] = &&op_fast_transfer_ops,
+    [0xA8] = &&op_fast_transfer_ops, [0x98] = &&op_fast_transfer_ops,
+    [0xBA] = &&op_fast_transfer_ops, [0x9A] = &&op_fast_transfer_ops,
+    [0xE8] = &&op_fast_reg_ops, [0xC8] = &&op_fast_reg_ops,
+    [0xCA] = &&op_fast_reg_ops, [0x88] = &&op_fast_reg_ops,
+    [0x18] = &&op_fast_flag_ops, [0x38] = &&op_fast_flag_ops,
+    [0x58] = &&op_fast_flag_ops, [0x78] = &&op_fast_flag_ops,
+    [0xD8] = &&op_fast_flag_ops, [0xF8] = &&op_fast_flag_ops,
+    [0xB8] = &&op_fast_flag_ops, [0xEA] = &&op_fast_flag_ops,
+    [0x48] = &&op_fast_stack_ops, [0x08] = &&op_fast_stack_ops,
+    [0x68] = &&op_fast_stack_ops, [0x28] = &&op_fast_stack_ops,
+    [0x4C] = &&op_fast_jump_ops, [0x20] = &&op_fast_jump_ops, [0x60] = &&op_fast_jump_ops,
+    [0x10] = &&op_fast_branch_ops, [0x30] = &&op_fast_branch_ops,
+    [0x50] = &&op_fast_branch_ops, [0x70] = &&op_fast_branch_ops,
+    [0x90] = &&op_fast_branch_ops, [0xB0] = &&op_fast_branch_ops,
+    [0xD0] = &&op_fast_branch_ops, [0xF0] = &&op_fast_branch_ops,
+  };
+
+#define FAST_DISPATCH_NEXT() do { \
+    cycles -= used; \
+    cpu_cycles -= used; \
+    op_cycles = 0; \
+    if (cycles <= 0) return; \
+    op_code = cpu_fetchb(cpu.PC++); \
+    goto *cpu_dispatch[op_code]; \
+  } while (0)
+
+  if (cycles <= 0) return;
+  op_code = cpu_fetchb(cpu.PC++);
+  goto *cpu_dispatch[op_code];
+
+op_fast_imm_load:
+  switch (op_code) {
+    case 0xA9: cpu.A = cpu_fetchb(cpu.PC++); cpu_update_zn_flags(cpu.A); used = 2; break;
+    case 0xA2: cpu.X = cpu_fetchb(cpu.PC++); cpu_update_zn_flags(cpu.X); used = 2; break;
+    default:   cpu.Y = cpu_fetchb(cpu.PC++); cpu_update_zn_flags(cpu.Y); used = 2; break;
+  }
+  FAST_DISPATCH_NEXT();
+
+op_fast_imm_ops:
+  switch (op_code) {
+    case 0x09: cpu.A |= cpu_fetchb(cpu.PC++); cpu_update_zn_flags(cpu.A); used = 2; break;
+    case 0x29: cpu.A &= cpu_fetchb(cpu.PC++); cpu_update_zn_flags(cpu.A); used = 2; break;
+    case 0x49: cpu.A ^= cpu_fetchb(cpu.PC++); cpu_update_zn_flags(cpu.A); used = 2; break;
+    case 0x69: { int value = cpu_fetchb(cpu.PC++); int result = cpu.A + value + (cpu_flag_set(carry_bp) ? 1 : 0); cpu_modify_flag(carry_bp, !!(result & 0x100)); cpu_modify_flag(overflow_bp, !!(~(cpu.A ^ value) & (cpu.A ^ result) & 0x80)); cpu.A = result & 0xFF; cpu_update_zn_flags(cpu.A); used = 2; break; }
+    case 0xE9: { int value = cpu_fetchb(cpu.PC++); int result = cpu.A - value - (cpu_flag_set(carry_bp) ? 0 : 1); cpu_modify_flag(carry_bp, !(result & 0x100)); cpu_modify_flag(overflow_bp, !!((cpu.A ^ value) & (cpu.A ^ result) & 0x80)); cpu.A = result & 0xFF; cpu_update_zn_flags(cpu.A); used = 2; break; }
+    case 0xC9: { int result = cpu.A - cpu_fetchb(cpu.PC++); cpu_modify_flag(carry_bp, result >= 0); cpu_modify_flag(zero_bp, result == 0); cpu_modify_flag(negative_bp, (result >> 7) & 1); used = 2; break; }
+    case 0xE0: { int result = cpu.X - cpu_fetchb(cpu.PC++); cpu_modify_flag(carry_bp, result >= 0); cpu_modify_flag(zero_bp, result == 0); cpu_modify_flag(negative_bp, (result >> 7) & 1); used = 2; break; }
+    default:   { int result = cpu.Y - cpu_fetchb(cpu.PC++); cpu_modify_flag(carry_bp, result >= 0); cpu_modify_flag(zero_bp, result == 0); cpu_modify_flag(negative_bp, (result >> 7) & 1); used = 2; break; }
+  }
+  FAST_DISPATCH_NEXT();
+
+op_fast_zp_ops:
+  switch (op_code) {
+    case 0xA5: op_address = cpu_fetchb(cpu.PC++); cpu.A = CPU_RAM[op_address]; cpu_update_zn_flags(cpu.A); used = 3; break;
+    case 0xA6: op_address = cpu_fetchb(cpu.PC++); cpu.X = CPU_RAM[op_address]; cpu_update_zn_flags(cpu.X); used = 3; break;
+    case 0xA4: op_address = cpu_fetchb(cpu.PC++); cpu.Y = CPU_RAM[op_address]; cpu_update_zn_flags(cpu.Y); used = 3; break;
+    case 0xB5: op_address = (cpu_fetchb(cpu.PC++) + cpu.X) & 0xFF; cpu.A = CPU_RAM[op_address]; cpu_update_zn_flags(cpu.A); used = 4; break;
+    case 0xB4: op_address = (cpu_fetchb(cpu.PC++) + cpu.X) & 0xFF; cpu.Y = CPU_RAM[op_address]; cpu_update_zn_flags(cpu.Y); used = 4; break;
+    case 0xB6: op_address = (cpu_fetchb(cpu.PC++) + cpu.Y) & 0xFF; cpu.X = CPU_RAM[op_address]; cpu_update_zn_flags(cpu.X); used = 4; break;
+    case 0x05: op_address = cpu_fetchb(cpu.PC++); cpu.A |= CPU_RAM[op_address]; cpu_update_zn_flags(cpu.A); used = 3; break;
+    case 0x25: op_address = cpu_fetchb(cpu.PC++); cpu.A &= CPU_RAM[op_address]; cpu_update_zn_flags(cpu.A); used = 3; break;
+    case 0x45: op_address = cpu_fetchb(cpu.PC++); cpu.A ^= CPU_RAM[op_address]; cpu_update_zn_flags(cpu.A); used = 3; break;
+    case 0x15: op_address = (cpu_fetchb(cpu.PC++) + cpu.X) & 0xFF; cpu.A |= CPU_RAM[op_address]; cpu_update_zn_flags(cpu.A); used = 4; break;
+    case 0x35: op_address = (cpu_fetchb(cpu.PC++) + cpu.X) & 0xFF; cpu.A &= CPU_RAM[op_address]; cpu_update_zn_flags(cpu.A); used = 4; break;
+    case 0x55: op_address = (cpu_fetchb(cpu.PC++) + cpu.X) & 0xFF; cpu.A ^= CPU_RAM[op_address]; cpu_update_zn_flags(cpu.A); used = 4; break;
+    case 0x65: { op_address = cpu_fetchb(cpu.PC++); int value = CPU_RAM[op_address]; int result = cpu.A + value + (cpu_flag_set(carry_bp) ? 1 : 0); cpu_modify_flag(carry_bp, !!(result & 0x100)); cpu_modify_flag(overflow_bp, !!(~(cpu.A ^ value) & (cpu.A ^ result) & 0x80)); cpu.A = result & 0xFF; cpu_update_zn_flags(cpu.A); used = 3; break; }
+    case 0x75: { op_address = (cpu_fetchb(cpu.PC++) + cpu.X) & 0xFF; int value = CPU_RAM[op_address]; int result = cpu.A + value + (cpu_flag_set(carry_bp) ? 1 : 0); cpu_modify_flag(carry_bp, !!(result & 0x100)); cpu_modify_flag(overflow_bp, !!(~(cpu.A ^ value) & (cpu.A ^ result) & 0x80)); cpu.A = result & 0xFF; cpu_update_zn_flags(cpu.A); used = 4; break; }
+    case 0xE5: { op_address = cpu_fetchb(cpu.PC++); int value = CPU_RAM[op_address]; int result = cpu.A - value - (cpu_flag_set(carry_bp) ? 0 : 1); cpu_modify_flag(carry_bp, !(result & 0x100)); cpu_modify_flag(overflow_bp, !!((cpu.A ^ value) & (cpu.A ^ result) & 0x80)); cpu.A = result & 0xFF; cpu_update_zn_flags(cpu.A); used = 3; break; }
+    case 0xF5: { op_address = (cpu_fetchb(cpu.PC++) + cpu.X) & 0xFF; int value = CPU_RAM[op_address]; int result = cpu.A - value - (cpu_flag_set(carry_bp) ? 0 : 1); cpu_modify_flag(carry_bp, !(result & 0x100)); cpu_modify_flag(overflow_bp, !!((cpu.A ^ value) & (cpu.A ^ result) & 0x80)); cpu.A = result & 0xFF; cpu_update_zn_flags(cpu.A); used = 4; break; }
+    case 0xC5: { op_address = cpu_fetchb(cpu.PC++); int result = cpu.A - CPU_RAM[op_address]; cpu_modify_flag(carry_bp, result >= 0); cpu_modify_flag(zero_bp, result == 0); cpu_modify_flag(negative_bp, (result >> 7) & 1); used = 3; break; }
+    case 0xD5: { op_address = (cpu_fetchb(cpu.PC++) + cpu.X) & 0xFF; int result = cpu.A - CPU_RAM[op_address]; cpu_modify_flag(carry_bp, result >= 0); cpu_modify_flag(zero_bp, result == 0); cpu_modify_flag(negative_bp, (result >> 7) & 1); used = 4; break; }
+    case 0xE4: { op_address = cpu_fetchb(cpu.PC++); int result = cpu.X - CPU_RAM[op_address]; cpu_modify_flag(carry_bp, result >= 0); cpu_modify_flag(zero_bp, result == 0); cpu_modify_flag(negative_bp, (result >> 7) & 1); used = 3; break; }
+    case 0xC4: { op_address = cpu_fetchb(cpu.PC++); int result = cpu.Y - CPU_RAM[op_address]; cpu_modify_flag(carry_bp, result >= 0); cpu_modify_flag(zero_bp, result == 0); cpu_modify_flag(negative_bp, (result >> 7) & 1); used = 3; break; }
+    case 0x24: { op_address = cpu_fetchb(cpu.PC++); int value = CPU_RAM[op_address]; cpu_modify_flag(zero_bp, !(cpu.A & value)); cpu.P = (cpu.P & 0x3F) | (0xC0 & value); used = 3; break; }
+    case 0x85: op_address = cpu_fetchb(cpu.PC++); CPU_RAM[op_address] = cpu.A; used = 3; break;
+    case 0x86: op_address = cpu_fetchb(cpu.PC++); CPU_RAM[op_address] = cpu.X; used = 3; break;
+    case 0x84: op_address = cpu_fetchb(cpu.PC++); CPU_RAM[op_address] = cpu.Y; used = 3; break;
+    case 0x95: op_address = (cpu_fetchb(cpu.PC++) + cpu.X) & 0xFF; CPU_RAM[op_address] = cpu.A; used = 4; break;
+    case 0x94: op_address = (cpu_fetchb(cpu.PC++) + cpu.X) & 0xFF; CPU_RAM[op_address] = cpu.Y; used = 4; break;
+    default:   op_address = (cpu_fetchb(cpu.PC++) + cpu.Y) & 0xFF; CPU_RAM[op_address] = cpu.X; used = 4; break;
+  }
+  FAST_DISPATCH_NEXT();
+
+op_fast_abs_ops:
+  switch (op_code) {
+    case 0xAD: op_address = cpu_fetchw(cpu.PC); cpu.PC += 2; cpu.A = mem_fast_readb(op_address); cpu_update_zn_flags(cpu.A); used = 4; break;
+    case 0xAE: op_address = cpu_fetchw(cpu.PC); cpu.PC += 2; cpu.X = mem_fast_readb(op_address); cpu_update_zn_flags(cpu.X); used = 4; break;
+    case 0xAC: op_address = cpu_fetchw(cpu.PC); cpu.PC += 2; cpu.Y = mem_fast_readb(op_address); cpu_update_zn_flags(cpu.Y); used = 4; break;
+    case 0xBD: op_address = cpu_fetchw(cpu.PC) + cpu.X; cpu.PC += 2; cpu.A = mem_fast_readb(op_address); cpu_update_zn_flags(cpu.A); used = 4 + (((op_address >> 8) != (cpu.PC >> 8)) ? 1 : 0); break;
+    case 0xB9: op_address = (cpu_fetchw(cpu.PC) + cpu.Y) & 0xFFFF; cpu.PC += 2; cpu.A = mem_fast_readb(op_address); cpu_update_zn_flags(cpu.A); used = 4 + (((op_address >> 8) != (cpu.PC >> 8)) ? 1 : 0); break;
+    case 0xBC: op_address = cpu_fetchw(cpu.PC) + cpu.X; cpu.PC += 2; cpu.Y = mem_fast_readb(op_address); cpu_update_zn_flags(cpu.Y); used = 4 + (((op_address >> 8) != (cpu.PC >> 8)) ? 1 : 0); break;
+    case 0xBE: op_address = (cpu_fetchw(cpu.PC) + cpu.Y) & 0xFFFF; cpu.PC += 2; cpu.X = mem_fast_readb(op_address); cpu_update_zn_flags(cpu.X); used = 4 + (((op_address >> 8) != (cpu.PC >> 8)) ? 1 : 0); break;
+    case 0x0D: op_address = cpu_fetchw(cpu.PC); cpu.PC += 2; cpu.A |= mem_fast_readb(op_address); cpu_update_zn_flags(cpu.A); used = 4; break;
+    case 0x1D: op_address = cpu_fetchw(cpu.PC) + cpu.X; cpu.PC += 2; cpu.A |= mem_fast_readb(op_address); cpu_update_zn_flags(cpu.A); used = 4 + (((op_address >> 8) != (cpu.PC >> 8)) ? 1 : 0); break;
+    case 0x19: op_address = (cpu_fetchw(cpu.PC) + cpu.Y) & 0xFFFF; cpu.PC += 2; cpu.A |= mem_fast_readb(op_address); cpu_update_zn_flags(cpu.A); used = 4 + (((op_address >> 8) != (cpu.PC >> 8)) ? 1 : 0); break;
+    case 0x2D: op_address = cpu_fetchw(cpu.PC); cpu.PC += 2; cpu.A &= mem_fast_readb(op_address); cpu_update_zn_flags(cpu.A); used = 4; break;
+    case 0x3D: op_address = cpu_fetchw(cpu.PC) + cpu.X; cpu.PC += 2; cpu.A &= mem_fast_readb(op_address); cpu_update_zn_flags(cpu.A); used = 4 + (((op_address >> 8) != (cpu.PC >> 8)) ? 1 : 0); break;
+    case 0x39: op_address = (cpu_fetchw(cpu.PC) + cpu.Y) & 0xFFFF; cpu.PC += 2; cpu.A &= mem_fast_readb(op_address); cpu_update_zn_flags(cpu.A); used = 4 + (((op_address >> 8) != (cpu.PC >> 8)) ? 1 : 0); break;
+    case 0x4D: op_address = cpu_fetchw(cpu.PC); cpu.PC += 2; cpu.A ^= mem_fast_readb(op_address); cpu_update_zn_flags(cpu.A); used = 4; break;
+    case 0x5D: op_address = cpu_fetchw(cpu.PC) + cpu.X; cpu.PC += 2; cpu.A ^= mem_fast_readb(op_address); cpu_update_zn_flags(cpu.A); used = 4 + (((op_address >> 8) != (cpu.PC >> 8)) ? 1 : 0); break;
+    case 0x59: op_address = (cpu_fetchw(cpu.PC) + cpu.Y) & 0xFFFF; cpu.PC += 2; cpu.A ^= mem_fast_readb(op_address); cpu_update_zn_flags(cpu.A); used = 4 + (((op_address >> 8) != (cpu.PC >> 8)) ? 1 : 0); break;
+    case 0x6D: { op_address = cpu_fetchw(cpu.PC); cpu.PC += 2; int value = mem_fast_readb(op_address); int result = cpu.A + value + (cpu_flag_set(carry_bp) ? 1 : 0); cpu_modify_flag(carry_bp, !!(result & 0x100)); cpu_modify_flag(overflow_bp, !!(~(cpu.A ^ value) & (cpu.A ^ result) & 0x80)); cpu.A = result & 0xFF; cpu_update_zn_flags(cpu.A); used = 4; break; }
+    case 0x7D: { op_address = cpu_fetchw(cpu.PC) + cpu.X; cpu.PC += 2; int value = mem_fast_readb(op_address); int result = cpu.A + value + (cpu_flag_set(carry_bp) ? 1 : 0); cpu_modify_flag(carry_bp, !!(result & 0x100)); cpu_modify_flag(overflow_bp, !!(~(cpu.A ^ value) & (cpu.A ^ result) & 0x80)); cpu.A = result & 0xFF; cpu_update_zn_flags(cpu.A); used = 4 + (((op_address >> 8) != (cpu.PC >> 8)) ? 1 : 0); break; }
+    case 0x79: { op_address = (cpu_fetchw(cpu.PC) + cpu.Y) & 0xFFFF; cpu.PC += 2; int value = mem_fast_readb(op_address); int result = cpu.A + value + (cpu_flag_set(carry_bp) ? 1 : 0); cpu_modify_flag(carry_bp, !!(result & 0x100)); cpu_modify_flag(overflow_bp, !!(~(cpu.A ^ value) & (cpu.A ^ result) & 0x80)); cpu.A = result & 0xFF; cpu_update_zn_flags(cpu.A); used = 4 + (((op_address >> 8) != (cpu.PC >> 8)) ? 1 : 0); break; }
+    case 0xFD: { op_address = cpu_fetchw(cpu.PC) + cpu.X; cpu.PC += 2; int value = mem_fast_readb(op_address); int result = cpu.A - value - (cpu_flag_set(carry_bp) ? 0 : 1); cpu_modify_flag(carry_bp, !(result & 0x100)); cpu_modify_flag(overflow_bp, !!((cpu.A ^ value) & (cpu.A ^ result) & 0x80)); cpu.A = result & 0xFF; cpu_update_zn_flags(cpu.A); used = 4 + (((op_address >> 8) != (cpu.PC >> 8)) ? 1 : 0); break; }
+    case 0xF9: { op_address = (cpu_fetchw(cpu.PC) + cpu.Y) & 0xFFFF; cpu.PC += 2; int value = mem_fast_readb(op_address); int result = cpu.A - value - (cpu_flag_set(carry_bp) ? 0 : 1); cpu_modify_flag(carry_bp, !(result & 0x100)); cpu_modify_flag(overflow_bp, !!((cpu.A ^ value) & (cpu.A ^ result) & 0x80)); cpu.A = result & 0xFF; cpu_update_zn_flags(cpu.A); used = 4 + (((op_address >> 8) != (cpu.PC >> 8)) ? 1 : 0); break; }
+    case 0xCD: { op_address = cpu_fetchw(cpu.PC); cpu.PC += 2; int result = cpu.A - mem_fast_readb(op_address); cpu_modify_flag(carry_bp, result >= 0); cpu_modify_flag(zero_bp, result == 0); cpu_modify_flag(negative_bp, (result >> 7) & 1); used = 4; break; }
+    case 0xDD: { op_address = cpu_fetchw(cpu.PC) + cpu.X; cpu.PC += 2; int result = cpu.A - mem_fast_readb(op_address); cpu_modify_flag(carry_bp, result >= 0); cpu_modify_flag(zero_bp, result == 0); cpu_modify_flag(negative_bp, (result >> 7) & 1); used = 4 + (((op_address >> 8) != (cpu.PC >> 8)) ? 1 : 0); break; }
+    case 0xD9: { op_address = (cpu_fetchw(cpu.PC) + cpu.Y) & 0xFFFF; cpu.PC += 2; int result = cpu.A - mem_fast_readb(op_address); cpu_modify_flag(carry_bp, result >= 0); cpu_modify_flag(zero_bp, result == 0); cpu_modify_flag(negative_bp, (result >> 7) & 1); used = 4 + (((op_address >> 8) != (cpu.PC >> 8)) ? 1 : 0); break; }
+    case 0xEC: { op_address = cpu_fetchw(cpu.PC); cpu.PC += 2; int result = cpu.X - mem_fast_readb(op_address); cpu_modify_flag(carry_bp, result >= 0); cpu_modify_flag(zero_bp, result == 0); cpu_modify_flag(negative_bp, (result >> 7) & 1); used = 4; break; }
+    case 0xCC: { op_address = cpu_fetchw(cpu.PC); cpu.PC += 2; int result = cpu.Y - mem_fast_readb(op_address); cpu_modify_flag(carry_bp, result >= 0); cpu_modify_flag(zero_bp, result == 0); cpu_modify_flag(negative_bp, (result >> 7) & 1); used = 4; break; }
+    case 0x2C: { op_address = cpu_fetchw(cpu.PC); cpu.PC += 2; int value = mem_fast_readb(op_address); cpu_modify_flag(zero_bp, !(cpu.A & value)); cpu.P = (cpu.P & 0x3F) | (0xC0 & value); used = 4; break; }
+    case 0x8D: op_address = cpu_fetchw(cpu.PC); cpu.PC += 2; mem_fast_readb(op_address); mem_fast_writeb(op_address, cpu.A); used = 4; break;
+    case 0x8E: op_address = cpu_fetchw(cpu.PC); cpu.PC += 2; mem_fast_readb(op_address); mem_fast_writeb(op_address, cpu.X); used = 4; break;
+    case 0x8C: op_address = cpu_fetchw(cpu.PC); cpu.PC += 2; mem_fast_readb(op_address); mem_fast_writeb(op_address, cpu.Y); used = 4; break;
+    case 0x99: op_address = (cpu_fetchw(cpu.PC) + cpu.Y) & 0xFFFF; cpu.PC += 2; mem_fast_readb(op_address); mem_fast_writeb(op_address, cpu.A); used = 5; break;
+    default:   op_address = (cpu_fetchw(cpu.PC) + cpu.X) & 0xFFFF; cpu.PC += 2; mem_fast_readb(op_address); mem_fast_writeb(op_address, cpu.A); used = 5; break;
+  }
+  FAST_DISPATCH_NEXT();
+
+op_fast_indx_ops:
+  switch (op_code) {
+    case 0xA1: { byte arg = cpu_fetchb(cpu.PC++); op_address = cpu_indirect_x_addr(arg); cpu.A = mem_fast_readb(op_address); cpu_update_zn_flags(cpu.A); used = 6; break; }
+    case 0x01: { byte arg = cpu_fetchb(cpu.PC++); op_address = cpu_indirect_x_addr(arg); cpu.A |= mem_fast_readb(op_address); cpu_update_zn_flags(cpu.A); used = 6; break; }
+    case 0x21: { byte arg = cpu_fetchb(cpu.PC++); op_address = cpu_indirect_x_addr(arg); cpu.A &= mem_fast_readb(op_address); cpu_update_zn_flags(cpu.A); used = 6; break; }
+    case 0x41: { byte arg = cpu_fetchb(cpu.PC++); op_address = cpu_indirect_x_addr(arg); cpu.A ^= mem_fast_readb(op_address); cpu_update_zn_flags(cpu.A); used = 6; break; }
+    case 0x61: { byte arg = cpu_fetchb(cpu.PC++); op_address = cpu_indirect_x_addr(arg); int value = mem_fast_readb(op_address); int result = cpu.A + value + (cpu_flag_set(carry_bp) ? 1 : 0); cpu_modify_flag(carry_bp, !!(result & 0x100)); cpu_modify_flag(overflow_bp, !!(~(cpu.A ^ value) & (cpu.A ^ result) & 0x80)); cpu.A = result & 0xFF; cpu_update_zn_flags(cpu.A); used = 6; break; }
+    case 0xE1: { byte arg = cpu_fetchb(cpu.PC++); op_address = cpu_indirect_x_addr(arg); int value = mem_fast_readb(op_address); int result = cpu.A - value - (cpu_flag_set(carry_bp) ? 0 : 1); cpu_modify_flag(carry_bp, !(result & 0x100)); cpu_modify_flag(overflow_bp, !!((cpu.A ^ value) & (cpu.A ^ result) & 0x80)); cpu.A = result & 0xFF; cpu_update_zn_flags(cpu.A); used = 6; break; }
+    case 0xC1: { byte arg = cpu_fetchb(cpu.PC++); op_address = cpu_indirect_x_addr(arg); int result = cpu.A - mem_fast_readb(op_address); cpu_modify_flag(carry_bp, result >= 0); cpu_modify_flag(zero_bp, result == 0); cpu_modify_flag(negative_bp, (result >> 7) & 1); used = 6; break; }
+    default:   { byte arg = cpu_fetchb(cpu.PC++); op_address = cpu_indirect_x_addr(arg); mem_fast_readb(op_address); mem_fast_writeb(op_address, cpu.A); used = 6; break; }
+  }
+  FAST_DISPATCH_NEXT();
+
+op_fast_indy_ops:
+  switch (op_code) {
+    case 0xB1: { byte arg = cpu_fetchb(cpu.PC++); word base = cpu_indirect_y_base(arg); op_address = (base + cpu.Y) & 0xFFFF; cpu.A = mem_fast_readb(op_address); cpu_update_zn_flags(cpu.A); used = 5 + (((op_address >> 8) != (base >> 8)) ? 1 : 0); break; }
+    case 0x11: { byte arg = cpu_fetchb(cpu.PC++); word base = cpu_indirect_y_base(arg); op_address = (base + cpu.Y) & 0xFFFF; cpu.A |= mem_fast_readb(op_address); cpu_update_zn_flags(cpu.A); used = 5 + (((op_address >> 8) != (base >> 8)) ? 1 : 0); break; }
+    case 0x31: { byte arg = cpu_fetchb(cpu.PC++); word base = cpu_indirect_y_base(arg); op_address = (base + cpu.Y) & 0xFFFF; cpu.A &= mem_fast_readb(op_address); cpu_update_zn_flags(cpu.A); used = 5 + (((op_address >> 8) != (base >> 8)) ? 1 : 0); break; }
+    case 0x51: { byte arg = cpu_fetchb(cpu.PC++); word base = cpu_indirect_y_base(arg); op_address = (base + cpu.Y) & 0xFFFF; cpu.A ^= mem_fast_readb(op_address); cpu_update_zn_flags(cpu.A); used = 5 + (((op_address >> 8) != (base >> 8)) ? 1 : 0); break; }
+    case 0x71: { byte arg = cpu_fetchb(cpu.PC++); word base = cpu_indirect_y_base(arg); op_address = (base + cpu.Y) & 0xFFFF; int value = mem_fast_readb(op_address); int result = cpu.A + value + (cpu_flag_set(carry_bp) ? 1 : 0); cpu_modify_flag(carry_bp, !!(result & 0x100)); cpu_modify_flag(overflow_bp, !!(~(cpu.A ^ value) & (cpu.A ^ result) & 0x80)); cpu.A = result & 0xFF; cpu_update_zn_flags(cpu.A); used = 5 + (((op_address >> 8) != (base >> 8)) ? 1 : 0); break; }
+    case 0xF1: { byte arg = cpu_fetchb(cpu.PC++); word base = cpu_indirect_y_base(arg); op_address = (base + cpu.Y) & 0xFFFF; int value = mem_fast_readb(op_address); int result = cpu.A - value - (cpu_flag_set(carry_bp) ? 0 : 1); cpu_modify_flag(carry_bp, !(result & 0x100)); cpu_modify_flag(overflow_bp, !!((cpu.A ^ value) & (cpu.A ^ result) & 0x80)); cpu.A = result & 0xFF; cpu_update_zn_flags(cpu.A); used = 5 + (((op_address >> 8) != (base >> 8)) ? 1 : 0); break; }
+    case 0xD1: { byte arg = cpu_fetchb(cpu.PC++); word base = cpu_indirect_y_base(arg); op_address = (base + cpu.Y) & 0xFFFF; int result = cpu.A - mem_fast_readb(op_address); cpu_modify_flag(carry_bp, result >= 0); cpu_modify_flag(zero_bp, result == 0); cpu_modify_flag(negative_bp, (result >> 7) & 1); used = 5 + (((op_address >> 8) != (base >> 8)) ? 1 : 0); break; }
+    default:   { byte arg = cpu_fetchb(cpu.PC++); op_address = (cpu_indirect_y_base(arg) + cpu.Y) & 0xFFFF; mem_fast_readb(op_address); mem_fast_writeb(op_address, cpu.A); used = 6; break; }
+  }
+  FAST_DISPATCH_NEXT();
+
+op_fast_transfer_ops:
+  switch (op_code) {
+    case 0xAA: cpu_update_zn_flags(cpu.X = cpu.A); used = 2; break;
+    case 0x8A: cpu_update_zn_flags(cpu.A = cpu.X); used = 2; break;
+    case 0xA8: cpu_update_zn_flags(cpu.Y = cpu.A); used = 2; break;
+    case 0x98: cpu_update_zn_flags(cpu.A = cpu.Y); used = 2; break;
+    case 0xBA: cpu_update_zn_flags(cpu.X = cpu.SP); used = 2; break;
+    default:   cpu.SP = cpu.X; used = 2; break;
+  }
+  FAST_DISPATCH_NEXT();
+
+op_fast_reg_ops:
+  switch (op_code) {
+    case 0xE8: cpu_update_zn_flags(++cpu.X); used = 2; break;
+    case 0xC8: cpu_update_zn_flags(++cpu.Y); used = 2; break;
+    case 0xCA: cpu_update_zn_flags(--cpu.X); used = 2; break;
+    default:   cpu_update_zn_flags(--cpu.Y); used = 2; break;
+  }
+  FAST_DISPATCH_NEXT();
+
+op_fast_flag_ops:
+  switch (op_code) {
+    case 0x18: cpu_unset_flag(carry_bp); used = 2; break;
+    case 0x38: cpu_set_flag(carry_bp); used = 2; break;
+    case 0x58: cpu_unset_flag(interrupt_bp); used = 2; break;
+    case 0x78: cpu_set_flag(interrupt_bp); used = 2; break;
+    case 0xD8: cpu_unset_flag(decimal_bp); used = 2; break;
+    case 0xF8: cpu_set_flag(decimal_bp); used = 2; break;
+    case 0xB8: cpu_unset_flag(overflow_bp); used = 2; break;
+    default:   used = 2; break;
+  }
+  FAST_DISPATCH_NEXT();
+
+op_fast_stack_ops:
+  switch (op_code) {
+    case 0x48: cpu_stack_pushb(cpu.A); used = 3; break;
+    case 0x08: cpu_stack_pushb(cpu.P | 0x30); used = 3; break;
+    case 0x68: cpu.A = cpu_stack_popb(); cpu_update_zn_flags(cpu.A); used = 4; break;
+    default:   cpu.P = (cpu_stack_popb() & 0xEF) | 0x20; used = 4; break;
+  }
+  FAST_DISPATCH_NEXT();
+
+op_fast_jump_ops:
+  switch (op_code) {
+    case 0x4C: cpu.PC = cpu_fetchw(cpu.PC); used = 3; break;
+    case 0x20: { word addr = cpu_fetchw(cpu.PC); cpu.PC += 2; cpu_stack_pushw(cpu.PC - 1); cpu.PC = addr; used = 6; break; }
+    default:   cpu.PC = cpu_stack_popw() + 1; used = 6; break;
+  }
+  FAST_DISPATCH_NEXT();
+
+op_fast_branch_ops:
+  {
+    word rel = cpu_fetchb(cpu.PC++);
+    if (rel & 0x80) rel -= 0x100;
+    word target = cpu.PC + rel;
+    bool take = false;
+    switch (op_code) {
+      case 0x10: take = !cpu_flag_set(negative_bp); break;
+      case 0x30: take =  cpu_flag_set(negative_bp); break;
+      case 0x50: take = !cpu_flag_set(overflow_bp); break;
+      case 0x70: take =  cpu_flag_set(overflow_bp); break;
+      case 0x90: take = !cpu_flag_set(carry_bp); break;
+      case 0xB0: take =  cpu_flag_set(carry_bp); break;
+      case 0xD0: take = !cpu_flag_set(zero_bp); break;
+      default:   take =  cpu_flag_set(zero_bp); break;
+    }
+    used = 2;
+    if (take) {
+      used++;
+      if ((target >> 8) != (cpu.PC >> 8)) used++;
+      cpu.PC = target;
+    }
+  }
+  FAST_DISPATCH_NEXT();
+
+op_slow:
+#endif
   while (cycles > 0) {
+#if !defined(__GNUC__)
     op_code = cpu_fetchb(cpu.PC++);
-    int used;
+#endif
 
     switch (op_code) {
       case 0xA9: cpu.A = cpu_fetchb(cpu.PC++); cpu_update_zn_flags(cpu.A); used = 2; break;
@@ -1552,5 +1812,14 @@ void cpu_run(long cycles) {
     cycles -= used;
     cpu_cycles -= used;
     op_cycles = 0;
+#if defined(__GNUC__)
+    if (cycles <= 0) return;
+    op_code = cpu_fetchb(cpu.PC++);
+    goto *cpu_dispatch[op_code];
+#endif
   }
+
+#if defined(__GNUC__)
+#undef FAST_DISPATCH_NEXT
+#endif
 }

@@ -6,6 +6,11 @@
 #include <klib.h>
 
 static int frame_cnt;
+static int emu_fps_cnt;
+static int display_fps_cnt;
+static unsigned long long total_emu_frames;
+static unsigned long long total_display_frames;
+static int fps_stats_start_ms;
 bool fce_draw_enabled = true;
 
 static int xpad_cached, ypad_cached;
@@ -80,6 +85,11 @@ void fce_init() {
   cpu_reset();
 
   frame_cnt = 0;
+  emu_fps_cnt = 0;
+  display_fps_cnt = 0;
+  total_emu_frames = 0;
+  total_display_frames = 0;
+  fps_stats_start_ms = 0;
   fce_draw_enabled = true;
   screen_pos_inited = false;
 }
@@ -98,11 +108,27 @@ void wait_for_frame() {
   gtime = cur;
 }
 
+void fce_print_fps_summary() {
+  if (fps_stats_start_ms == 0) return;
+
+  int upt = uptime_ms();
+  int elapsed = upt - fps_stats_start_ms;
+  if (elapsed <= 0) elapsed = 1;
+  unsigned long long avg_emu_fps_x100 = total_emu_frames * 100000ULL / (unsigned)elapsed;
+  unsigned long long avg_display_fps_x100 = total_display_frames * 100000ULL / (unsigned)elapsed;
+
+  putch('\n');
+  printf("FPS summary: AVG FPS = %llu.%02llu  AVG EMU FPS = %llu.%02llu  AVG DISPLAY FPS = %llu.%02llu\n",
+      avg_emu_fps_x100 / 100, avg_emu_fps_x100 % 100,
+      avg_emu_fps_x100 / 100, avg_emu_fps_x100 % 100,
+      avg_display_fps_x100 / 100, avg_display_fps_x100 % 100);
+}
+
 // FCE Lifecycle
 
 void fce_run() {
   gtime = uptime_ms();
-  int nr_draw = 0;
+  fps_stats_start_ms = gtime;
   uint32_t last = gtime;
   while(1) {
     wait_for_frame();
@@ -115,13 +141,16 @@ void fce_run() {
       ppu_cycle();
     }
 
-    nr_draw ++;
+    emu_fps_cnt++;
+    total_emu_frames++;
     int upt = uptime_ms();
     if (upt - last > 1000) {
       last = upt;
-      for (int i = 0; i < 80; i++) putch('\b');
-      printf("(System time: %ds) FPS = %d", upt / 1000, nr_draw);
-      nr_draw = 0;
+      for (int i = 0; i < 96; i++) putch('\b');
+      printf("(System time: %ds) FPS = %d  EMU FPS = %d  DISPLAY FPS = %d",
+          upt / 1000, emu_fps_cnt, emu_fps_cnt, display_fps_cnt);
+      emu_fps_cnt = 0;
+      display_fps_cnt = 0;
     }
   }
 }
@@ -144,7 +173,15 @@ void fce_update_screen() {
     screen_pos_inited = true;
   }
 
+#if AGGRESSIVE_PPU_HALF_RES
+  for (int y = 1; y < SCR_H; y += 2) {
+    memcpy(&fce_canvas[y * SCR_W], &fce_canvas[(y - 1) * SCR_W], SCR_W * sizeof(uint32_t));
+  }
+#endif
+
   io_write(AM_GPU_FBDRAW, xpad_cached, ypad_cached, fce_canvas, SCR_W, SCR_H, true);
+  display_fps_cnt++;
+  total_display_frames++;
 
   for (int i = 0; i < SCR_W * SCR_H; i ++) fce_canvas[i] = bgc;
 

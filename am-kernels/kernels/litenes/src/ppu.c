@@ -13,6 +13,7 @@ static bool ppu_2007_first_read;
 static byte ppu_addr_latch;
 static byte PPU_SPRRAM[0x100];
 static byte PPU_RAM[0x4000];
+static uint32_t PPU_PALETTE_RGB[0x20];
 static bool ppu_sprite_hit_occured = false;
 static byte ppu_latch;
 
@@ -89,7 +90,11 @@ byte ppu_ram_read(word address) {
 }
 
 void ppu_ram_write(word address, byte data) {
-  PPU_RAM[ppu_get_real_ram_address(address)] = data;
+  word real = ppu_get_real_ram_address(address);
+  PPU_RAM[real] = data;
+  if ((real & 0x3F00) == 0x3F00) {
+    PPU_PALETTE_RGB[real & 0x1F] = palette[data & 0x3F];
+  }
 }
 
 // 3F01 = 0F (00001111)
@@ -134,7 +139,11 @@ void ppu_draw_background_scanline(bool mirror) {
   int screen_off_x = mirror ? 256 : 0;
   int scroll_x = ppu.PPUSCROLL_X;
   int y_draw = scanline + 1;
-  bool do_draw = fce_draw_enabled && ((unsigned)y_draw < SCR_H);
+  bool render_scanline = fce_draw_enabled && ((unsigned)y_draw < SCR_H);
+#if AGGRESSIVE_PPU_HALF_RES
+  if (render_scanline && (y_draw & 1)) render_scanline = false;
+#endif
+  bool do_draw = render_scanline;
   uint32_t *canvas_row = do_draw ? &fce_canvas[y_draw * SCR_W] : NULL;
 
   byte sprite0_x = PPU_SPRRAM[3];
@@ -146,16 +155,30 @@ void ppu_draw_background_scanline(bool mirror) {
   int hit_x_end = sprite0_x + 8;
   byte *bg_hit_row = need_hit_row ? ppu_screen_background[scanline] : NULL;
 
+  if (!do_draw && !need_hit_row) {
+    return;
+  }
+
   word nametable_base = ppu_base_nametable_address() + (mirror ? 0x400 : 0);
   word attribute_base = nametable_base + 0x3C0 + ((scanline >> 5) * 8);
   word pattern_base = ppu_background_pattern_table_address();
 
   bool top = (scanline & 31) < 16;
   int tile_x_start = ppu_shows_background_in_leftmost_8px() ? 0 : 1;
+  int vis_start = scroll_x - screen_off_x - 7;
+  int vis_end = scroll_x - screen_off_x + (SCR_W - 1);
+  int tile_x_begin = vis_start > 0 ? ((vis_start + 7) >> 3) : 0;
+  int tile_x_end = vis_end >= 0 ? (vis_end >> 3) : -1;
+  if (!do_draw && need_hit_row) {
+    tile_x_begin = hit_x_begin >> 3;
+    tile_x_end = (hit_x_end - 1) >> 3;
+  }
+  if (tile_x_begin < tile_x_start) tile_x_begin = tile_x_start;
+  if (tile_x_end > 31) tile_x_end = 31;
+  if (tile_x_begin > tile_x_end) return;
 
-  for (int tile_x = tile_x_start; tile_x < 32; tile_x++) {
+  for (int tile_x = tile_x_begin; tile_x <= tile_x_end; tile_x++) {
     int screen_x0 = (tile_x << 3) - scroll_x + screen_off_x;
-    if (screen_x0 >= SCR_W || screen_x0 <= -8) continue;
 
     int tile_index = PPU_RAM[nametable_base + tile_x + (tile_y << 5)];
     word tile_address = pattern_base + (tile_index << 4);
@@ -165,19 +188,20 @@ void ppu_draw_background_scanline(bool mirror) {
     byte palette_attribute = PPU_RAM[attribute_base + (tile_x >> 2)];
     if (!top) palette_attribute >>= 4;
     if ((tile_x & 3) >= 2) palette_attribute >>= 2;
-    word palette_address = 0x3F00 + ((palette_attribute & 3) << 2);
-    uint32_t tile_colors[4] = {
-      0,
-      palette[PPU_RAM[palette_address + 1]],
-      palette[PPU_RAM[palette_address + 2]],
-      palette[PPU_RAM[palette_address + 3]],
-    };
+    const uint32_t *palette_rgb = &PPU_PALETTE_RGB[((palette_attribute & 3) << 2)];
 
     const byte *lh = ppu_l_h_addition_table[l][h];
     int x_begin = 0;
     int x_end = 8;
-    if (screen_x0 < 0) x_begin = -screen_x0;
-    if (screen_x0 + 8 > SCR_W) x_end = SCR_W - screen_x0;
+    if (do_draw) {
+      if (screen_x0 < 0) x_begin = -screen_x0;
+      if (screen_x0 + 8 > SCR_W) x_end = SCR_W - screen_x0;
+    }
+    else {
+      int tile_x0 = tile_x << 3;
+      if (tile_x0 < hit_x_begin) x_begin = hit_x_begin - tile_x0;
+      if (tile_x0 + 8 > hit_x_end) x_end = hit_x_end - tile_x0;
+    }
 
     for (int x = x_begin; x < x_end; x++) {
       byte color = lh[x];
@@ -188,7 +212,7 @@ void ppu_draw_background_scanline(bool mirror) {
           bg_hit_row[bgx] = color;
         }
         if (do_draw) {
-          canvas_row[screen_x] = tile_colors[color];
+          canvas_row[screen_x] = palette_rgb[color];
         }
       }
     }
@@ -200,9 +224,21 @@ void ppu_draw_sprite_scanline() {
   int sprite_h = ppu_sprite_height();
   word sprite_pattern_base = ppu_sprite_pattern_table_address();
   bool show_bg = ppu_shows_background();
+  int y_draw = scanline + 1;
+  bool render_scanline = fce_draw_enabled && ((unsigned)y_draw < SCR_H);
+#if AGGRESSIVE_PPU_HALF_RES
+  if (render_scanline && (y_draw & 1)) render_scanline = false;
+#endif
+
+  if (!render_scanline) {
+    if (!show_bg || ppu_sprite_hit_occured) return;
+    byte sprite0_y = PPU_SPRRAM[0];
+    if (sprite0_y > scanline || sprite0_y + sprite_h < scanline) return;
+  }
 
   int scanline_sprite_count = 0;
-  for (int n = 0; n < 0x100; n += 4) {
+  int sprite_end = render_scanline ? 0x100 : 4;
+  for (int n = 0; n < sprite_end; n += 4) {
     byte sprite_x = PPU_SPRRAM[n + 3];
     byte sprite_y = PPU_SPRRAM[n];
 
@@ -211,7 +247,7 @@ void ppu_draw_sprite_scanline() {
     scanline_sprite_count++;
     if (scanline_sprite_count > 8) {
       ppu_set_sprite_overflow(true);
-      // break;
+      break;
     }
 
     byte sprite_attr = PPU_SPRRAM[n + 2];
@@ -224,17 +260,10 @@ void ppu_draw_sprite_scanline() {
     byte l = PPU_RAM[tile_address + y_fetch];
     byte h = PPU_RAM[tile_address + y_fetch + 8];
 
-    word palette_address = 0x3F10 + ((sprite_attr & 0x3) << 2);
-    uint32_t sprite_colors[4] = {
-      0,
-      palette[PPU_RAM[palette_address + 1]],
-      palette[PPU_RAM[palette_address + 2]],
-      palette[PPU_RAM[palette_address + 3]],
-    };
+    const uint32_t *palette_rgb = &PPU_PALETTE_RGB[0x10 + ((sprite_attr & 0x3) << 2)];
     const byte *lh = hflip ? ppu_l_h_addition_flip_table[l][h] : ppu_l_h_addition_table[l][h];
 
-    int y_draw = sprite_y + y_in_tile + 1;
-    bool do_draw = fce_draw_enabled && ((unsigned)y_draw < SCR_H);
+    bool do_draw = render_scanline && ((unsigned)y_draw < SCR_H);
     uint32_t *canvas_row = do_draw ? &fce_canvas[y_draw * SCR_W] : NULL;
 
     int x_end = 8;
@@ -248,7 +277,7 @@ void ppu_draw_sprite_scanline() {
       if (color != 0) {
         int screen_x = sprite_x + x;
         if (do_draw) {
-          canvas_row[screen_x] = sprite_colors[color];
+          canvas_row[screen_x] = palette_rgb[color];
         }
         if (check_hit && bg_hit_row[screen_x] == color) {
           ppu_set_sprite_0_hit(true);
@@ -286,38 +315,30 @@ static uint32_t background_time, sprite_time, cpu_time;
 
 void ppu_cycle() {
 #ifdef PROFILE
-  TIME_TYPE t0, t1, t2, t3, t4, t5;
+  TIME_TYPE t0, t1, t2, t3;
 #endif
 
   if (!ppu.ready && cpu_clock() > 29658)
     ppu.ready = true;
 
-  time_read(t0);
-  cpu_run(256);
-  time_read(t1);
-
   ppu.scanline++;
 
+  time_read(t0);
   if (ppu.scanline < SCR_H && ppu_shows_background()) {
     ppu_draw_background_scanline(false);
     ppu_draw_background_scanline(true);
   }
 
-  time_read(t2);
-  cpu_run(85 - 16);
-  time_read(t3);
-
   if (ppu.scanline < SCR_H && ppu_shows_sprites()) {
     ppu_draw_sprite_scanline();
   }
+  time_read(t1);
 
-  time_read(t4);
-  cpu_run(16);
-  time_read(t5);
+  cpu_run(341);
+  time_read(t2);
 
-  cpu_time += time_diff(t1, t0) + time_diff(t3, t2) + time_diff(t5, t4);
-  background_time += time_diff(t2, t1);
-  sprite_time += time_diff(t4, t3);
+  background_time += time_diff(t1, t0);
+  cpu_time += time_diff(t2, t1);
 
   if (ppu.scanline == 241) {
     ppu_set_in_vblank(true);
@@ -329,14 +350,14 @@ void ppu_cycle() {
     ppu_sprite_hit_occured = false;
     ppu_set_in_vblank(false);
 
-    time_read(t0);
+    time_read(t3);
     fce_update_screen();
-    time_read(t1);
+    time_read(t0);
 
 #ifdef PROFILE
-    uint32_t total = cpu_time + background_time + sprite_time + time_diff(t1, t0);
+    uint32_t total = cpu_time + background_time + sprite_time + time_diff(t0, t3);
     printf("Time: cpu + bg + spr + scr = (%d + %d + %d + %d)\t= %d %s\n",
-        cpu_time, background_time, sprite_time, time_diff(t1, t0), total, TIMER_UNIT);
+        cpu_time, background_time, sprite_time, time_diff(t0, t3), total, TIMER_UNIT);
 #endif
     cpu_time = 0;
     background_time = 0;
@@ -441,6 +462,9 @@ void ppu_init() {
   ppu.PPUSTATUS |= 0xA0;
   ppu.PPUDATA = 0;
   ppu_2007_first_read = true;
+  for (int i = 0; i < 0x20; i++) {
+    PPU_PALETTE_RGB[i] = palette[0];
+  }
 
   // Initializing low-high byte-pairs for pattern tables
   int h, l, x;
