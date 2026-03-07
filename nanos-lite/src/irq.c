@@ -2,7 +2,11 @@
 
 static Context* do_event(Event e, Context* c) {
   switch (e.event) {
-    default: panic("Unhandled event ID = %d", e.event);
+    case EVENT_YIELD:
+      printf("nanos-lite: handle EVENT_YIELD\n");
+      break;
+    default:
+      panic("Unhandled event ID = %d", e.event);
   }
 
   return c;
