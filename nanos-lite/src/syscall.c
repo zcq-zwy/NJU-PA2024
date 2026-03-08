@@ -4,6 +4,9 @@
 
 #include "syscall.h"
 
+#ifdef CONFIG_STRACE
+#define STRACE_LOG(...) Log(__VA_ARGS__)
+
 static const char *syscall_name[] = {
   [SYS_exit] = "exit",
   [SYS_yield] = "yield",
@@ -29,7 +32,6 @@ static bool should_trace_syscall(uintptr_t id, uintptr_t arg1, uintptr_t arg3) {
   if (id == SYS_write && (arg1 == 1 || arg1 == 2) && arg3 == 1) return false;
   return true;
 }
-
 
 #define O_RDONLY 0
 #define O_WRONLY 1
@@ -69,6 +71,27 @@ static void format_open_flags(uintptr_t flags, char *buf, size_t size) {
   if ((size_t)n >= size) return;
   if (flags & O_EXCL)   n += snprintf(buf + n, size - n, "|O_EXCL");
 }
+#else
+#define STRACE_LOG(...)
+static inline bool should_trace_syscall(uintptr_t id, uintptr_t arg1, uintptr_t arg3) {
+  (void)id;
+  (void)arg1;
+  (void)arg3;
+  return false;
+}
+static inline const char *get_syscall_name(uintptr_t id) {
+  (void)id;
+  return "unknown";
+}
+static inline const char *get_whence_name(uintptr_t whence) {
+  (void)whence;
+  return "SEEK_UNKNOWN";
+}
+static inline void format_open_flags(uintptr_t flags, char *buf, size_t size) {
+  (void)flags;
+  if (size > 0) buf[0] = 0;
+}
+#endif
 
 void do_syscall(Context *c) {
   uintptr_t a[4];
@@ -82,62 +105,62 @@ void do_syscall(Context *c) {
     if (a[0] == SYS_open) {
       char flagbuf[64];
       format_open_flags(a[2], flagbuf, sizeof(flagbuf));
-      Log("strace: syscall id=%d name=%s path=\"%s\" flags=%s mode=%p",
+      STRACE_LOG("strace: syscall id=%d name=%s path=\"%s\" flags=%s mode=%p",
           a[0], get_syscall_name(a[0]), (const char *)a[1], flagbuf, a[3]);
     } else if (a[0] == SYS_lseek) {
-      Log("strace: syscall id=%d name=%s fd=%d(%s) offset=%p whence=%s",
+      STRACE_LOG("strace: syscall id=%d name=%s fd=%d(%s) offset=%p whence=%s",
           a[0], get_syscall_name(a[0]), a[1], fs_get_filename(a[1]), a[2], get_whence_name(a[3]));
     } else if (a[0] == SYS_read || a[0] == SYS_write || a[0] == SYS_close) {
-      Log("strace: syscall id=%d name=%s fd=%d(%s) args=[%p, %p, %p]",
+      STRACE_LOG("strace: syscall id=%d name=%s fd=%d(%s) args=[%p, %p, %p]",
           a[0], get_syscall_name(a[0]), a[1], fs_get_filename(a[1]), a[1], a[2], a[3]);
     } else {
-      Log("strace: syscall id=%d name=%s args=[%p, %p, %p]",
+      STRACE_LOG("strace: syscall id=%d name=%s args=[%p, %p, %p]",
           a[0], get_syscall_name(a[0]), a[1], a[2], a[3]);
     }
   }
 
   switch (a[0]) {
     case SYS_exit:
-      Log("strace: syscall exit -> halt(%d)", a[1]);
+      STRACE_LOG("strace: syscall exit -> halt(%d)", a[1]);
       halt(a[1]);
       break;
     case SYS_yield:
       c->GPRx = 0;
-      Log("strace: syscall yield -> ret=%d", c->GPRx);
+      STRACE_LOG("strace: syscall yield -> ret=%d", c->GPRx);
       break;
     case SYS_open:
       c->GPRx = fs_open((const char *)a[1], a[2], a[3]);
       if (trace_this) {
-        Log("strace: syscall open -> ret=%d fd=%d(%s)", c->GPRx, c->GPRx, fs_get_filename(c->GPRx));
+        STRACE_LOG("strace: syscall open -> ret=%d fd=%d(%s)", c->GPRx, c->GPRx, fs_get_filename(c->GPRx));
       }
       break;
     case SYS_read:
       c->GPRx = fs_read(a[1], (void *)a[2], a[3]);
       if (trace_this) {
-        Log("strace: syscall read -> ret=%d", c->GPRx);
+        STRACE_LOG("strace: syscall read -> ret=%d", c->GPRx);
       }
       break;
     case SYS_write:
       c->GPRx = fs_write(a[1], (const void *)a[2], a[3]);
       if (trace_this) {
-        Log("strace: syscall write -> ret=%d", c->GPRx);
+        STRACE_LOG("strace: syscall write -> ret=%d", c->GPRx);
       }
       break;
     case SYS_close:
       c->GPRx = fs_close(a[1]);
       if (trace_this) {
-        Log("strace: syscall close -> ret=%d", c->GPRx);
+        STRACE_LOG("strace: syscall close -> ret=%d", c->GPRx);
       }
       break;
     case SYS_lseek:
       c->GPRx = fs_lseek(a[1], a[2], a[3]);
       if (trace_this) {
-        Log("strace: syscall lseek -> ret=%d", c->GPRx);
+        STRACE_LOG("strace: syscall lseek -> ret=%d", c->GPRx);
       }
       break;
     case SYS_brk:
       c->GPRx = 0;
-      Log("strace: syscall brk -> ret=%d", c->GPRx);
+      STRACE_LOG("strace: syscall brk -> ret=%d", c->GPRx);
       break;
     case SYS_gettimeofday: {
       struct timeval *tv = (struct timeval *)a[1];
@@ -148,7 +171,7 @@ void do_syscall(Context *c) {
       }
       c->GPRx = 0;
       if (trace_this) {
-        Log("strace: syscall gettimeofday -> ret=%d tv=[%ld,%ld]",
+        STRACE_LOG("strace: syscall gettimeofday -> ret=%d tv=[%ld,%ld]",
             c->GPRx, tv ? (long)tv->tv_sec : -1L, tv ? (long)tv->tv_usec : -1L);
       }
       break;
