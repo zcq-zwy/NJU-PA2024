@@ -14,6 +14,10 @@ static int sbctldev = -1;
 static int screen_w = 0, screen_h = 0;
 static int canvas_w = 0, canvas_h = 0;
 static int canvas_x = 0, canvas_y = 0;
+static int present_w = 0, present_h = 0;
+static int present_x = 0, present_y = 0;
+static uint32_t *stretch_buf = NULL;
+static size_t stretch_buf_cap = 0;
 static uint32_t boot_time = 0;
 
 static void get_screen_size() {
@@ -33,6 +37,16 @@ static void get_screen_size() {
   assert(width != NULL && height != NULL);
   sscanf(width, "WIDTH%*[^0-9]%d", &screen_w);
   sscanf(height, "HEIGHT%*[^0-9]%d", &screen_h);
+}
+
+static uint32_t *ensure_stretch_buf(size_t pixels) {
+  if (pixels > stretch_buf_cap) {
+    uint32_t *new_buf = realloc(stretch_buf, pixels * sizeof(uint32_t));
+    assert(new_buf != NULL);
+    stretch_buf = new_buf;
+    stretch_buf_cap = pixels;
+  }
+  return stretch_buf;
 }
 
 uint32_t NDL_GetTicks() {
@@ -58,19 +72,27 @@ void NDL_OpenCanvas(int *w, int *h) {
 
   canvas_w = screen_w;
   canvas_h = screen_h;
+  present_w = screen_w;
+  present_h = screen_h;
+  present_x = 0;
+  present_y = 0;
+
   if (w != NULL && h != NULL) {
     if (*w == 0 && *h == 0) {
       *w = screen_w;
       *h = screen_h;
     }
-    assert(*w <= screen_w && *h <= screen_h);
     canvas_w = *w;
     canvas_h = *h;
   }
-  canvas_x = (screen_w - canvas_w) / 2;
-  canvas_y = (screen_h - canvas_h) / 2;
 
   if (getenv("NWM_APP")) {
+    assert(canvas_w <= screen_w && canvas_h <= screen_h);
+    present_w = canvas_w;
+    present_h = canvas_h;
+    present_x = (screen_w - present_w) / 2;
+    present_y = (screen_h - present_h) / 2;
+
     int fbctl = 4;
     fbdev = 5;
     char buf[64];
@@ -84,17 +106,52 @@ void NDL_OpenCanvas(int *w, int *h) {
     }
     close(fbctl);
   }
+
+  canvas_x = present_x;
+  canvas_y = present_y;
 }
 
 void NDL_DrawRect(uint32_t *pixels, int x, int y, int w, int h) {
   assert(fbdev >= 0);
-  for (int row = 0; row < h; row++) {
-    off_t offset = ((off_t)(canvas_y + y + row) * screen_w + canvas_x + x) * sizeof(uint32_t);
+  if (w <= 0 || h <= 0) return;
+
+  if (present_w == canvas_w && present_h == canvas_h) {
+    for (int row = 0; row < h; row++) {
+      off_t offset = ((off_t)(present_y + y + row) * screen_w + present_x + x) * sizeof(uint32_t);
+      lseek(fbdev, offset, SEEK_SET);
+      write(fbdev, pixels + row * w, w * sizeof(uint32_t));
+    }
+    lseek(fbdev, 0, SEEK_END);
+    write(fbdev, pixels, 0);
+    return;
+  }
+
+  int dst_x0 = present_x + x * present_w / canvas_w;
+  int dst_y0 = present_y + y * present_h / canvas_h;
+  int dst_x1 = present_x + (x + w) * present_w / canvas_w;
+  int dst_y1 = present_y + (y + h) * present_h / canvas_h;
+  int dst_w = dst_x1 - dst_x0;
+  int dst_h = dst_y1 - dst_y0;
+  if (dst_w <= 0 || dst_h <= 0) return;
+
+  uint32_t *buf = ensure_stretch_buf((size_t)dst_w * dst_h);
+  for (int row = 0; row < dst_h; row++) {
+    int src_row = row * h / dst_h;
+    uint32_t *dst = buf + row * dst_w;
+    uint32_t *src = pixels + src_row * w;
+    for (int col = 0; col < dst_w; col++) {
+      int src_col = col * w / dst_w;
+      dst[col] = src[src_col];
+    }
+  }
+
+  for (int row = 0; row < dst_h; row++) {
+    off_t offset = ((off_t)(dst_y0 + row) * screen_w + dst_x0) * sizeof(uint32_t);
     lseek(fbdev, offset, SEEK_SET);
-    write(fbdev, pixels + row * w, w * sizeof(uint32_t));
+    write(fbdev, buf + row * dst_w, dst_w * sizeof(uint32_t));
   }
   lseek(fbdev, 0, SEEK_END);
-  write(fbdev, pixels, 0);
+  write(fbdev, buf, 0);
 }
 
 void NDL_OpenAudio(int freq, int channels, int samples) {
@@ -163,4 +220,7 @@ int NDL_Init(uint32_t flags) {
 
 void NDL_Quit() {
   NDL_CloseAudio();
+  free(stretch_buf);
+  stretch_buf = NULL;
+  stretch_buf_cap = 0;
 }
