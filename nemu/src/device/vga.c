@@ -15,6 +15,7 @@
 
 #include <common.h>
 #include <device/map.h>
+#include <stdio.h>
 
 #define SCREEN_W (MUXDEF(CONFIG_VGA_SIZE_800x600, 800, 400))
 #define SCREEN_H (MUXDEF(CONFIG_VGA_SIZE_800x600, 600, 300))
@@ -41,18 +42,62 @@ static uint32_t *vgactl_port_base = NULL;
 static SDL_Renderer *renderer = NULL;
 static SDL_Texture *texture = NULL;
 
+static const char *renderer_policy_name() {
+#ifdef CONFIG_VGA_RENDERER_SOFTWARE
+  return "software";
+#elif defined(CONFIG_VGA_RENDERER_ACCELERATED)
+  return "accelerated";
+#else
+  return "auto";
+#endif
+}
+
+static uint32_t renderer_flags() {
+#ifdef CONFIG_VGA_RENDERER_SOFTWARE
+  return SDL_RENDERER_SOFTWARE;
+#elif defined(CONFIG_VGA_RENDERER_ACCELERATED)
+  return SDL_RENDERER_ACCELERATED;
+#else
+  return 0;
+#endif
+}
+
 static void init_screen() {
   SDL_Window *window = NULL;
+  SDL_RendererInfo info = {};
   char title[128];
   sprintf(title, "%s-NEMU", str(__GUEST_ISA__));
   SDL_Init(SDL_INIT_VIDEO);
-  SDL_CreateWindowAndRenderer(
+  window = SDL_CreateWindow(
+      title, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
       SCREEN_W * (MUXDEF(CONFIG_VGA_SIZE_400x300, 2, 1)),
-      SCREEN_H * (MUXDEF(CONFIG_VGA_SIZE_400x300, 2, 1)),
-      0, &window, &renderer);
+      SCREEN_H * (MUXDEF(CONFIG_VGA_SIZE_400x300, 2, 1)), 0);
+  Assert(window != NULL, "Can not create SDL window: %s", SDL_GetError());
+
+#ifdef CONFIG_VGA_RENDERER_SOFTWARE
+  SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
+#else
+  SDL_SetHint(SDL_HINT_RENDER_DRIVER, "");
+#endif
+
+  renderer = SDL_CreateRenderer(window, -1, renderer_flags());
+  if (renderer == NULL && renderer_flags() != 0) {
+    Log("Requested SDL renderer policy '%s' failed: %s; fallback to auto",
+        renderer_policy_name(), SDL_GetError());
+    SDL_SetHint(SDL_HINT_RENDER_DRIVER, "");
+    renderer = SDL_CreateRenderer(window, -1, 0);
+  }
+  Assert(renderer != NULL, "Can not create SDL renderer: %s", SDL_GetError());
   SDL_SetWindowTitle(window, title);
+
   texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
       SDL_TEXTUREACCESS_STATIC, SCREEN_W, SCREEN_H);
+  Assert(texture != NULL, "Can not create SDL texture: %s", SDL_GetError());
+
+  if (SDL_GetRendererInfo(renderer, &info) == 0) {
+    Log("VGA SDL renderer policy=%s actual=%s flags=0x%x",
+        renderer_policy_name(), info.name, info.flags);
+  }
   SDL_RenderPresent(renderer);
 }
 
@@ -62,6 +107,7 @@ static inline void update_screen() {
   SDL_RenderCopy(renderer, texture, NULL, NULL);
   SDL_RenderPresent(renderer);
 }
+
 #else
 static void init_screen() {}
 

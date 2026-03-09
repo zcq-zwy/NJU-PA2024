@@ -15,9 +15,11 @@
 
 #include <isa.h>
 #include <cpu/cpu.h>
+#include <cpu/difftest.h>
 #include <readline/readline.h>
 #include <readline/history.h>
 #include "sdb.h"
+#include "snapshot.h"
 #include <memory/vaddr.h>
 
 static int is_batch_mode = false;
@@ -226,6 +228,36 @@ static int cmd_w(char *args) {
     return 0;
   }
 
+static int cmd_detach(char *args) {
+  difftest_detach();
+  return 0;
+}
+
+static int cmd_attach(char *args) {
+  difftest_attach();
+  return 0;
+}
+
+static int cmd_save(char *args) {
+  while (args != NULL && *args == ' ') args ++;
+  if (args == NULL || *args == 0) {
+    puts("Usage: save /abs/path/to/snapshot");
+    return 0;
+  }
+  snapshot_save(args);
+  return 0;
+}
+
+static int cmd_load(char *args) {
+  while (args != NULL && *args == ' ') args ++;
+  if (args == NULL || *args == 0) {
+    puts("Usage: load /abs/path/to/snapshot");
+    return 0;
+  }
+  snapshot_load(args);
+  return 0;
+}
+
 static int cmd_help(char *args);
 
 static struct {
@@ -242,6 +274,10 @@ static struct {
   { "p", "Evaluate expression", cmd_p },
   { "w", "Set watchpoint: w EXPR", cmd_w },
   { "d", "Delete watchpoint: d N", cmd_d },
+  { "detach", "Disable differential testing", cmd_detach },
+  { "attach", "Enable differential testing and sync REF from DUT", cmd_attach },
+  { "save", "Save current NEMU state to a snapshot file", cmd_save },
+  { "load", "Load NEMU state from a snapshot file", cmd_load },
 
   /* TODO: Add more commands */
 

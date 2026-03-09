@@ -17,6 +17,7 @@
 #include <memory/host.h>
 #include <memory/vaddr.h>
 #include <device/map.h>
+#include <device/snapshot.h>
 
 #define IO_SPACE_MAX (32 * 1024 * 1024)
 
@@ -92,4 +93,18 @@ void map_write(paddr_t addr, int len, word_t data, IOMap *map) {
     (void)is_write;
     (void)map_name;
   });
+}
+
+size_t snapshot_io_space_size() {
+  return p_space - io_space;
+}
+
+void snapshot_io_space_save(void *buf, size_t size) {
+  Assert(size == snapshot_io_space_size(), "io_space snapshot size mismatch: %zu != %zu", size, snapshot_io_space_size());
+  memcpy(buf, io_space, size);
+}
+
+void snapshot_io_space_load(const void *buf, size_t size) {
+  Assert(size == snapshot_io_space_size(), "io_space snapshot size mismatch: %zu != %zu", size, snapshot_io_space_size());
+  memcpy(io_space, buf, size);
 }

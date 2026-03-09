@@ -83,6 +83,19 @@ config VGA_SHOW_SCREEN
   bool "Enable SDL SCREEN"
   default y
 
+if VGA_SHOW_SCREEN && !TARGET_AM
+choice
+  prompt "SDL renderer policy"
+  default VGA_RENDERER_AUTO
+config VGA_RENDERER_AUTO
+  bool "Auto"
+config VGA_RENDERER_SOFTWARE
+  bool "Software"
+config VGA_RENDERER_ACCELERATED
+  bool "Accelerated"
+endchoice
+endif
+
 choice
   prompt "Screen Size"
   default VGA_SIZE_400x300

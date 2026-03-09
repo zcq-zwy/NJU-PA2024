@@ -14,6 +14,7 @@
 ***************************************************************************************/
 
 #include <device/map.h>
+#include <device/snapshot.h>
 #include <utils.h>
 
 #define KEYDOWN_MASK 0x8000
@@ -97,4 +98,23 @@ void init_i8042() {
   add_mmio_map("keyboard", CONFIG_I8042_DATA_MMIO, i8042_data_port_base, 4, i8042_data_io_handler);
 #endif
   IFNDEF(CONFIG_TARGET_AM, init_keymap());
+}
+
+void keyboard_snapshot_save(KeyboardSnapshot *out) {
+  memset(out, 0, sizeof(*out));
+#ifndef CONFIG_TARGET_AM
+  memcpy(out->key_queue, key_queue, sizeof(key_queue));
+  out->key_f = key_f;
+  out->key_r = key_r;
+#endif
+}
+
+void keyboard_snapshot_load(const KeyboardSnapshot *in) {
+#ifndef CONFIG_TARGET_AM
+  memcpy(key_queue, in->key_queue, sizeof(key_queue));
+  key_f = in->key_f;
+  key_r = in->key_r;
+#else
+  (void)in;
+#endif
 }

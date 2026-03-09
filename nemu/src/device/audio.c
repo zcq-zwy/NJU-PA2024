@@ -1,5 +1,6 @@
-﻿#include <common.h>
+#include <common.h>
 #include <device/map.h>
+#include <device/snapshot.h>
 #include <SDL2/SDL.h>
 
 enum {
@@ -37,6 +38,14 @@ static inline void audio_unlock_if_started(void) {
 static inline uint32_t u32_min(uint32_t a, uint32_t b) {
   return a < b ? a : b;
 }
+static void audio_stop() {
+  if (!audio_started) return;
+
+  SDL_CloseAudio();
+  audio_started = false;
+  audio_base[reg_init] = 0;
+}
+
 
 static void audio_callback(void *userdata, uint8_t *stream, int len) {
   (void)userdata;
@@ -87,7 +96,9 @@ static void audio_callback(void *userdata, uint8_t *stream, int len) {
 }
 
 static void audio_start() {
-  if (audio_started) return;
+  if (audio_started) {
+    audio_stop();
+  }
 
   SDL_AudioSpec want = {};
   want.freq = audio_base[reg_freq];
@@ -213,4 +224,45 @@ void init_audio() {
 
   // Audio stream payload is always mapped at MMIO AUDIO_SBUF_ADDR.
   add_mmio_map("audio-sbuf", CONFIG_SB_ADDR, sbuf, CONFIG_SB_SIZE, NULL);
+}
+
+void audio_snapshot_save(AudioSnapshot *out) {
+  memset(out, 0, sizeof(*out));
+  audio_lock_if_started();
+  out->sbuf_rpos = sbuf_rpos;
+  out->sbuf_count = sbuf_count;
+  out->audio_started = audio_started;
+  out->audio_need_prefill = audio_need_prefill;
+  out->audio_prefill_bytes = audio_prefill_bytes;
+  out->underflow_events = underflow_events;
+  out->underflow_bytes = underflow_bytes;
+  out->last_underflow_report_ms = last_underflow_report_ms;
+  audio_unlock_if_started();
+}
+
+void audio_snapshot_load(const AudioSnapshot *in) {
+  bool was_started = audio_started;
+  if (was_started) SDL_LockAudio();
+
+  if (was_started && !in->audio_started) {
+    audio_stop();
+    was_started = false;
+  }
+
+  if (!was_started && in->audio_started) {
+    audio_start();
+    if (audio_started) SDL_LockAudio();
+  }
+
+  sbuf_rpos = in->sbuf_rpos;
+  sbuf_count = in->sbuf_count;
+  audio_need_prefill = in->audio_need_prefill;
+  audio_prefill_bytes = in->audio_prefill_bytes;
+  underflow_events = in->underflow_events;
+  underflow_bytes = in->underflow_bytes;
+  last_underflow_report_ms = in->last_underflow_report_ms;
+  audio_base[reg_count] = sbuf_count;
+  audio_base[reg_init] = audio_started ? 1 : 0;
+
+  if (audio_started) SDL_UnlockAudio();
 }
