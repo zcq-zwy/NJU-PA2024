@@ -6,27 +6,43 @@ static PCB pcb[MAX_NR_PROC] __attribute__((used)) = {};
 static PCB pcb_boot = {};
 PCB *current = NULL;
 
+static void context_kload(PCB *pcb, void (*entry)(void *), void *arg) {
+  Area kstack = { .start = pcb->stack, .end = pcb->stack + STACK_SIZE };
+  pcb->cp = kcontext(kstack, entry, arg);
+}
+
 void switch_boot_pcb() {
   current = &pcb_boot;
 }
 
 void hello_fun(void *arg) {
-  int j = 1;
+  const char *name = (const char *)arg;
+  int times = 1;
   while (1) {
-    Log("Hello World from Nanos-lite with arg '%p' for the %dth time!", (uintptr_t)arg, j);
-    j ++;
+    Log("Hello World from Nanos-lite kernel thread %s for the %dth time!", name, times);
+    times ++;
     yield();
   }
 }
 
 void init_proc() {
-  switch_boot_pcb();
-
   Log("Initializing processes...");
 
-  naive_uload(NULL, "/bin/nterm");
+  context_kload(&pcb[0], hello_fun, (void *)"A");
+  context_kload(&pcb[1], hello_fun, (void *)"B");
+  switch_boot_pcb();
 }
 
 Context* schedule(Context *prev) {
-  return NULL;
+  if (current != NULL) {
+    current->cp = prev;
+  }
+
+  if (current == &pcb_boot || current == &pcb[1]) {
+    current = &pcb[0];
+  } else {
+    current = &pcb[1];
+  }
+
+  return current->cp;
 }
