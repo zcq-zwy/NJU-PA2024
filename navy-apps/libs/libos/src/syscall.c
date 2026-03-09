@@ -81,7 +81,7 @@ void *_sbrk(intptr_t increment) {
   static char *program_break = NULL;
   if (program_break == NULL) {
     program_break = &_end;
-#if defined(__riscv)
+#if defined(__riscv) && !defined(__PIE__)
     if (program_break < (char *)0x84000000) program_break = (char *)0x84000000;
 #endif
   }
