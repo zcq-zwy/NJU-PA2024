@@ -94,6 +94,13 @@ static inline void format_open_flags(uintptr_t flags, char *buf, size_t size) {
 }
 #endif
 
+static void sys_execve(const char *filename, char *const argv[], char *const envp[]) {
+  context_uload(current, filename, argv, envp);
+  switch_boot_pcb();
+  yield();
+  panic("SYS_execve should not return");
+}
+
 void do_syscall(Context *c) {
   uintptr_t a[4];
   a[0] = c->GPR1;
@@ -121,11 +128,12 @@ void do_syscall(Context *c) {
   }
 
   switch (a[0]) {
-    case SYS_exit:
+    case SYS_exit: {
+      static char *nterm_argv[] = { "/bin/nterm", NULL };
       STRACE_LOG("strace: syscall exit(%d) -> execve(\"/bin/nterm\")", a[1]);
-      naive_uload(NULL, "/bin/nterm");
-      panic("SYS_exit should not return after reloading /bin/nterm");
+      sys_execve("/bin/nterm", nterm_argv, NULL);
       break;
+    }
     case SYS_yield:
       c->GPRx = 0;
       STRACE_LOG("strace: syscall yield -> ret=%d", c->GPRx);
@@ -166,8 +174,7 @@ void do_syscall(Context *c) {
       break;
     case SYS_execve:
       STRACE_LOG("strace: syscall execve -> filename=\"%s\"", (const char *)a[1]);
-      naive_uload(NULL, (const char *)a[1]);
-      panic("SYS_execve should not return");
+      sys_execve((const char *)a[1], (char *const *)a[2], (char *const *)a[3]);
       break;
     case SYS_gettimeofday: {
       struct timeval *tv = (struct timeval *)a[1];

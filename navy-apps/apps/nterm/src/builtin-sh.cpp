@@ -110,6 +110,7 @@ static void sh_ls() {
     "/bin/timer-test",
     "/bin/event-test",
     "/bin/bmp-test",
+    "/bin/exec-test",
     "/share/pictures/projectn.bmp",
     "/share/fonts/Courier-7.bdf",
     "/share/slides/slides-0.bmp",
