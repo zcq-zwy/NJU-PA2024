@@ -10,7 +10,7 @@
 # define Elf_Phdr Elf32_Phdr
 #endif
 
-#if defined(__ISA_AM_NATIVE__)
+#if defined(__ISA_AM_NATIVE__) || defined(__ISA_NATIVE__)
 # define EXPECT_TYPE EM_X86_64
 #elif defined(__ISA_X86__)
 # define EXPECT_TYPE EM_386
@@ -63,4 +63,11 @@ void naive_uload(PCB *pcb, const char *filename) {
   uintptr_t entry = loader(pcb, filename);
   Log("Jump to entry = %p", entry);
   ((void(*)())entry) ();
+}
+
+void context_uload(PCB *pcb, const char *filename) {
+  uintptr_t entry = loader(pcb, filename);
+  Area kstack = { .start = pcb->stack, .end = pcb->stack + STACK_SIZE };
+  pcb->cp = ucontext(NULL, kstack, (void *)entry);
+  pcb->cp->GPRx = (uintptr_t)heap.end;
 }

@@ -18,6 +18,7 @@ typedef union {
 extern PCB *current;
 
 void naive_uload(PCB *pcb, const char *filename);
+void context_uload(PCB *pcb, const char *filename);
 void switch_boot_pcb(void);
 void init_proc(void);
 Context *schedule(Context *prev);

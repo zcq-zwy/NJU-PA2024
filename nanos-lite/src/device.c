@@ -15,6 +15,7 @@ static const char *keyname[256] __attribute__((used)) = {
 
 size_t serial_write(const void *buf, size_t offset, size_t len) {
   (void)offset;
+  MULTIPROGRAM_YIELD();
   const char *p = (const char *)buf;
   for (size_t i = 0; i < len; i++) {
     putch(p[i]);
@@ -24,6 +25,7 @@ size_t serial_write(const void *buf, size_t offset, size_t len) {
 
 size_t events_read(void *buf, size_t offset, size_t len) {
   (void)offset;
+  MULTIPROGRAM_YIELD();
   if (len == 0) return 0;
 
   AM_INPUT_KEYBRD_T ev = io_read(AM_INPUT_KEYBRD);
@@ -53,6 +55,7 @@ size_t dispinfo_read(void *buf, size_t offset, size_t len) {
 }
 
 size_t fb_write(const void *buf, size_t offset, size_t len) {
+  MULTIPROGRAM_YIELD();
   AM_GPU_CONFIG_T gpu = io_read(AM_GPU_CONFIG);
 
   if (len == 0) {

@@ -7,7 +7,7 @@ static void* (*pgalloc_usr)(int) = NULL;
 static void (*pgfree_usr)(void*) = NULL;
 static int vme_enable = 0;
 
-static Area segments[] = {      // Kernel memory mappings
+static Area segments[] = {
   NEMU_PADDR_SPACE
 };
 
@@ -30,8 +30,7 @@ bool vme_init(void* (*pgalloc_f)(int), void (*pgfree_f)(void*)) {
 
   kas.ptr = pgalloc_f(PGSIZE);
 
-  int i;
-  for (i = 0; i < LENGTH(segments); i ++) {
+  for (int i = 0; i < LENGTH(segments); i ++) {
     void *va = segments[i].start;
     for (; va < segments[i].end; va += PGSIZE) {
       map(&kas, va, va, 0);
@@ -45,11 +44,10 @@ bool vme_init(void* (*pgalloc_f)(int), void (*pgfree_f)(void*)) {
 }
 
 void protect(AddrSpace *as) {
-  PTE *updir = (PTE*)(pgalloc_usr(PGSIZE));
+  PTE *updir = (PTE *)(pgalloc_usr(PGSIZE));
   as->ptr = updir;
   as->area = USER_SPACE;
   as->pgsize = PGSIZE;
-  // map kernel space
   memcpy(updir, kas.ptr, PGSIZE);
 }
 
@@ -70,5 +68,13 @@ void map(AddrSpace *as, void *va, void *pa, int prot) {
 }
 
 Context *ucontext(AddrSpace *as, Area kstack, void *entry) {
-  return NULL;
+  uintptr_t sp = (uintptr_t)kstack.end;
+  sp &= ~(uintptr_t)0xf;
+  Context *c = (Context *)(sp - sizeof(Context));
+  *c = (Context) { 0 };
+
+  c->mstatus = 0;
+  c->mepc = (uintptr_t)entry;
+  c->pdir = (as == NULL ? NULL : as->ptr);
+  return c;
 }
