@@ -59,6 +59,7 @@ __am_asm_trap:
 
   mv a0, sp
   call __am_irq_handle
+  mv sp, a0
 
   LOAD t1, OFFSET_STATUS(sp)
   LOAD t2, OFFSET_EPC(sp)
@@ -69,3 +70,11 @@ __am_asm_trap:
 
   addi sp, sp, CONTEXT_SIZE
   mret
+
+
+.globl __am_kcontext_start
+__am_kcontext_start:
+  addi sp, sp, -16
+  andi sp, sp, -16
+  jalr a1
+  jal  __am_panic_on_return

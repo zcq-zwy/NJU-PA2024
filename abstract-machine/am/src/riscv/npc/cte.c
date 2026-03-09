@@ -1,6 +1,7 @@
 #include <am.h>
 #include <riscv/riscv.h>
 #include <klib.h>
+#include <klib-macros.h>
 
 static Context* (*user_handler)(Event, Context*) = NULL;
 
@@ -8,7 +9,14 @@ Context* __am_irq_handle(Context *c) {
   if (user_handler) {
     Event ev = {0};
     switch (c->mcause) {
-      default: ev.event = EVENT_ERROR; break;
+      case 11:
+        c->mepc += 4;
+        ev.event = (c->GPR1 == (uintptr_t)-1 ? EVENT_YIELD : EVENT_SYSCALL);
+        break;
+      default:
+        ev.event = EVENT_ERROR;
+        ev.cause = c->mcause;
+        break;
     }
 
     c = user_handler(ev, c);
@@ -19,6 +27,9 @@ Context* __am_irq_handle(Context *c) {
 }
 
 extern void __am_asm_trap(void);
+extern void __am_kcontext_start(void);
+
+void __am_panic_on_return() { panic("kernel context returns"); }
 
 bool cte_init(Context*(*handler)(Event, Context*)) {
   // initialize exception entry
@@ -31,7 +42,19 @@ bool cte_init(Context*(*handler)(Event, Context*)) {
 }
 
 Context *kcontext(Area kstack, void (*entry)(void *), void *arg) {
-  return NULL;
+  uintptr_t sp = (uintptr_t)kstack.end;
+  sp &= ~(uintptr_t)0xf;
+  Context *c = (Context *)(sp - sizeof(Context));
+  *c = (Context) { 0 };
+
+  c->mstatus = 0x1800;
+  c->mepc = (uintptr_t)__am_kcontext_start;
+  c->gpr[2] = sp;
+  c->GPR2 = (uintptr_t)arg;
+  c->GPR3 = (uintptr_t)entry;
+  c->pdir = NULL;
+
+  return c;
 }
 
 void yield() {
