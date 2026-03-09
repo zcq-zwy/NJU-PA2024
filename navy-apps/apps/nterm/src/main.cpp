@@ -1,14 +1,68 @@
 #include <nterm.h>
 #include <SDL.h>
 #include <SDL_bdf.h>
+#include <string.h>
 
 static const char *font_fname = "/share/fonts/Courier-7.bdf";
+static const char *boot_music_fname = "/share/music/boot.wav";
 static BDF_Font *font = NULL;
 static SDL_Surface *screen = NULL;
 Terminal *term = NULL;
 
+static uint8_t *boot_audio_buf = NULL;
+static uint32_t boot_audio_len = 0;
+static uint32_t boot_audio_pos = 0;
+static int boot_audio_playing = 0;
+static int boot_audio_done = 0;
+
 void builtin_sh_run();
 void extern_app_run(const char *app_path);
+
+static void boot_audio_callback(void *userdata, uint8_t *stream, int len) {
+  memset(stream, 0, len);
+  if (!boot_audio_playing || boot_audio_buf == NULL || boot_audio_pos >= boot_audio_len) {
+    return;
+  }
+
+  uint32_t remain = boot_audio_len - boot_audio_pos;
+  uint32_t ncopy = (remain < (uint32_t)len ? remain : (uint32_t)len);
+  memcpy(stream, boot_audio_buf + boot_audio_pos, ncopy);
+  boot_audio_pos += ncopy;
+  if (boot_audio_pos >= boot_audio_len) {
+    boot_audio_done = 1;
+  }
+}
+
+static void boot_audio_start() {
+  SDL_AudioSpec spec = {};
+  if (SDL_LoadWAV(boot_music_fname, &spec, &boot_audio_buf, &boot_audio_len) == NULL) {
+    return;
+  }
+
+  spec.callback = boot_audio_callback;
+  spec.userdata = NULL;
+  boot_audio_pos = 0;
+  boot_audio_done = 0;
+  boot_audio_playing = 1;
+  SDL_OpenAudio(&spec, NULL);
+  SDL_PauseAudio(0);
+}
+
+static void boot_audio_stop() {
+  if (!boot_audio_playing && boot_audio_buf == NULL) {
+    return;
+  }
+
+  SDL_CloseAudio();
+  if (boot_audio_buf != NULL) {
+    SDL_FreeWAV(boot_audio_buf);
+  }
+  boot_audio_buf = NULL;
+  boot_audio_len = 0;
+  boot_audio_pos = 0;
+  boot_audio_playing = 0;
+  boot_audio_done = 0;
+}
 
 int main(int argc, char *argv[]) {
   SDL_Init(0);
@@ -21,7 +75,10 @@ int main(int argc, char *argv[]) {
 
   term = new Terminal(W, H);
 
-  if (argc < 2) { builtin_sh_run(); }
+  if (argc < 2) {
+    boot_audio_start();
+    builtin_sh_run();
+  }
   else { extern_app_run(argv[1]); }
 
   // should not reach here
@@ -36,6 +93,10 @@ static void draw_ch(int x, int y, char ch, uint32_t fg, uint32_t bg) {
 }
 
 void refresh_terminal() {
+  if (boot_audio_done) {
+    boot_audio_stop();
+  }
+
   int needsync = 0;
   for (int i = 0; i < W; i ++)
     for (int j = 0; j < H; j ++)
