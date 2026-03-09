@@ -78,6 +78,35 @@ size_t fb_write(const void *buf, size_t offset, size_t len) {
   return len;
 }
 
+size_t sbctl_read(void *buf, size_t offset, size_t len) {
+  (void)offset;
+  if (len < sizeof(int)) return 0;
+
+  AM_AUDIO_CONFIG_T cfg = io_read(AM_AUDIO_CONFIG);
+  AM_AUDIO_STATUS_T stat = io_read(AM_AUDIO_STATUS);
+  int free_bytes = cfg.bufsize - stat.count;
+  if (free_bytes < 0) free_bytes = 0;
+
+  memcpy(buf, &free_bytes, sizeof(free_bytes));
+  return sizeof(free_bytes);
+}
+
+size_t sbctl_write(const void *buf, size_t offset, size_t len) {
+  (void)offset;
+  if (len < sizeof(int) * 3) return 0;
+
+  const int *args = (const int *)buf;
+  io_write(AM_AUDIO_CTRL, args[0], args[1], args[2]);
+  return sizeof(int) * 3;
+}
+
+size_t sb_write(const void *buf, size_t offset, size_t len) {
+  (void)offset;
+  if (len == 0) return 0;
+  io_write(AM_AUDIO_PLAY, (Area){ .start = (void *)buf, .end = (void *)buf + len });
+  return len;
+}
+
 void init_device() {
   Log("Initializing devices...");
   ioe_init();

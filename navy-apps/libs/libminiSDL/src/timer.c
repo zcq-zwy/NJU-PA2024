@@ -2,6 +2,8 @@
 #include <sdl-timer.h>
 #include <stdio.h>
 
+void __SDL_AudioCallbackHelper(void);
+
 SDL_TimerID SDL_AddTimer(uint32_t interval, SDL_NewTimerCallback callback, void *param) {
   return NULL;
 }
@@ -17,5 +19,6 @@ uint32_t SDL_GetTicks() {
 void SDL_Delay(uint32_t ms) {
   uint32_t start = SDL_GetTicks();
   while (SDL_GetTicks() - start < ms) {
+    __SDL_AudioCallbackHelper();
   }
 }

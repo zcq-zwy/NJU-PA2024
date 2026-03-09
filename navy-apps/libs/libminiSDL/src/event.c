@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <string.h>
 
+void __SDL_AudioCallbackHelper(void);
+
 #define keyname(k) #k,
 
 static const char *keyname[] = {
@@ -26,6 +28,8 @@ int SDL_PushEvent(SDL_Event *ev) {
 }
 
 int SDL_PollEvent(SDL_Event *ev) {
+  __SDL_AudioCallbackHelper();
+
   char buf[64];
   int nread = NDL_PollEvent(buf, sizeof(buf));
   if (nread == 0) return 0;

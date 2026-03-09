@@ -12,12 +12,15 @@ typedef struct {
   size_t open_offset;
 } Finfo;
 
-enum {FD_STDIN, FD_STDOUT, FD_STDERR, FD_EVENTS, FD_DISPINFO, FD_FB};
+enum {FD_STDIN, FD_STDOUT, FD_STDERR, FD_EVENTS, FD_DISPINFO, FD_FB, FD_SBCTL, FD_SB};
 
 size_t serial_write(const void *buf, size_t offset, size_t len);
 size_t events_read(void *buf, size_t offset, size_t len);
 size_t dispinfo_read(void *buf, size_t offset, size_t len);
 size_t fb_write(const void *buf, size_t offset, size_t len);
+size_t sbctl_read(void *buf, size_t offset, size_t len);
+size_t sbctl_write(const void *buf, size_t offset, size_t len);
+size_t sb_write(const void *buf, size_t offset, size_t len);
 size_t ramdisk_read(void *buf, size_t offset, size_t len);
 size_t ramdisk_write(const void *buf, size_t offset, size_t len);
 
@@ -38,6 +41,8 @@ static Finfo file_table[] __attribute__((used)) = {
   [FD_EVENTS]   = {"/dev/events",    0, 0, events_read,  invalid_write, 0},
   [FD_DISPINFO] = {"/proc/dispinfo", 0, 0, dispinfo_read,invalid_write, 0},
   [FD_FB]       = {"/dev/fb",        0, 0, invalid_read, fb_write,      0},
+  [FD_SBCTL]    = {"/dev/sbctl",     0, 0, sbctl_read,   sbctl_write,   0},
+  [FD_SB]       = {"/dev/sb",        0, 0, invalid_read, sb_write,      0},
 #include "files.h"
 };
 

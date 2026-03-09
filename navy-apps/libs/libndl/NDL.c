@@ -9,6 +9,8 @@
 
 static int evtdev = -1;
 static int fbdev = -1;
+static int sbdev = -1;
+static int sbctldev = -1;
 static int screen_w = 0, screen_h = 0;
 static int canvas_w = 0, canvas_h = 0;
 static int canvas_x = 0, canvas_y = 0;
@@ -96,17 +98,52 @@ void NDL_DrawRect(uint32_t *pixels, int x, int y, int w, int h) {
 }
 
 void NDL_OpenAudio(int freq, int channels, int samples) {
+  if (sbdev < 0) {
+    sbdev = open("/dev/sb", O_WRONLY, 0);
+    assert(sbdev >= 0);
+  }
+  if (sbctldev < 0) {
+    sbctldev = open("/dev/sbctl", O_RDWR, 0);
+    assert(sbctldev >= 0);
+  }
+
+  int args[3] = { freq, channels, samples };
+  int written = 0;
+  while (written < (int)sizeof(args)) {
+    int n = write(sbctldev, (uint8_t *)args + written, sizeof(args) - written);
+    assert(n > 0);
+    written += n;
+  }
 }
 
 void NDL_CloseAudio() {
+  if (sbdev >= 0) {
+    close(sbdev);
+    sbdev = -1;
+  }
+  if (sbctldev >= 0) {
+    close(sbctldev);
+    sbctldev = -1;
+  }
 }
 
 int NDL_PlayAudio(void *buf, int len) {
-  return 0;
+  if (sbdev < 0 || len <= 0) return 0;
+  int written = 0;
+  while (written < len) {
+    int n = write(sbdev, (uint8_t *)buf + written, len - written);
+    if (n <= 0) break;
+    written += n;
+  }
+  return written;
 }
 
 int NDL_QueryAudio() {
-  return 0;
+  if (sbctldev < 0) return 0;
+  int free_bytes = 0;
+  int nread = read(sbctldev, &free_bytes, sizeof(free_bytes));
+  assert(nread == (int)sizeof(free_bytes));
+  return free_bytes;
 }
 
 int NDL_Init(uint32_t flags) {
@@ -125,4 +162,5 @@ int NDL_Init(uint32_t flags) {
 }
 
 void NDL_Quit() {
+  NDL_CloseAudio();
 }
