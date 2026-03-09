@@ -42,11 +42,14 @@ static void sh_help() {
 
 static int sh_parse(char *line, char *argv[], int max_args) {
   int argc = 0;
+  if (max_args <= 0) return 0;
+
   char *token = strtok(line, " \t\r\n");
-  while (token != NULL && argc < max_args) {
+  while (token != NULL && argc < max_args - 1) {
     argv[argc ++] = token;
     token = strtok(NULL, " \t\r\n");
   }
+  argv[argc] = NULL;
   return argc;
 }
 
@@ -106,6 +109,9 @@ static void sh_ls() {
     "/bin/menu",
     "/bin/nterm",
     "/bin/nslider",
+    "/bin/busybox",
+    "/bin/cat",
+    "/bin/printenv",
     "/bin/hello",
     "/bin/timer-test",
     "/bin/event-test",

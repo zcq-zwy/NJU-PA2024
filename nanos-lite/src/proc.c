@@ -19,7 +19,9 @@ void hello_fun(void *arg) {
   const char *name = (const char *)arg;
   int times = 1;
   while (1) {
-    Log("Hello World from Nanos-lite kernel thread %s for the %dth time!", name, times);
+    if (times <= 5 || times % 100000 == 0) {
+      Log("Hello World from Nanos-lite kernel thread %s for the %dth time!", name, times);
+    }
     times ++;
     yield();
   }
@@ -29,8 +31,9 @@ void init_proc() {
   Log("Initializing processes...");
 
   context_kload(&pcb[0], hello_fun, (void *)"A");
-  static char *menu_argv[] = { "/bin/menu", NULL };
-  context_uload(&pcb[1], "/bin/menu", menu_argv, NULL);
+  static char *nterm_argv[] = { "/bin/nterm", NULL };
+  int ret = context_uload(&pcb[1], "/bin/nterm", nterm_argv, NULL);
+  assert(ret == 0);
   switch_boot_pcb();
 }
 

@@ -29,7 +29,7 @@
 # error Unsupported ISA
 #endif
 
-static uintptr_t loader(PCB *pcb, const char *filename) {
+static int loader(PCB *pcb, const char *filename, uintptr_t *entry) {
   (void)pcb;
 
   if (filename == NULL) {
@@ -37,6 +37,7 @@ static uintptr_t loader(PCB *pcb, const char *filename) {
   }
 
   int fd = fs_open(filename, 0, 0);
+  if (fd < 0) return fd;
 
   Elf_Ehdr ehdr;
   fs_read(fd, &ehdr, sizeof(ehdr));
@@ -57,7 +58,8 @@ static uintptr_t loader(PCB *pcb, const char *filename) {
   }
 
   fs_close(fd);
-  return ehdr.e_entry;
+  *entry = ehdr.e_entry;
+  return 0;
 }
 
 static uintptr_t build_user_stack(char *const argv[], char *const envp[]) {
@@ -113,14 +115,19 @@ static uintptr_t build_user_stack(char *const argv[], char *const envp[]) {
 }
 
 void naive_uload(PCB *pcb, const char *filename) {
-  uintptr_t entry = loader(pcb, filename);
-  Log("Jump to entry = %p", entry);
+  uintptr_t entry = 0;
+  int ret = loader(pcb, filename, &entry);
+  assert(ret == 0);
+  Log("Jump to entry = %p", (void *)entry);
   ((void(*)())entry) ();
 }
 
-void context_uload(PCB *pcb, const char *filename, char *const argv[], char *const envp[]) {
-  uintptr_t entry = loader(pcb, filename);
+int context_uload(PCB *pcb, const char *filename, char *const argv[], char *const envp[]) {
+  uintptr_t entry = 0;
+  int ret = loader(pcb, filename, &entry);
+  if (ret < 0) return ret;
   Area kstack = { .start = pcb->stack, .end = pcb->stack + STACK_SIZE };
   pcb->cp = ucontext(NULL, kstack, (void *)entry);
   pcb->cp->GPRx = build_user_stack(argv, envp);
+  return 0;
 }
