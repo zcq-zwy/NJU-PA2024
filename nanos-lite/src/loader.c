@@ -1,6 +1,7 @@
 #include <proc.h>
 #include <elf.h>
 #include <fs.h>
+#include <alloca.h>
 
 #ifdef __LP64__
 # define Elf_Ehdr Elf64_Ehdr
@@ -59,15 +60,67 @@ static uintptr_t loader(PCB *pcb, const char *filename) {
   return ehdr.e_entry;
 }
 
+static uintptr_t build_user_stack(char *const argv[], char *const envp[]) {
+  const int stack_pages = STACK_SIZE / PGSIZE;
+  uint8_t *stack = (uint8_t *)new_page(stack_pages);
+  uintptr_t top = (uintptr_t)stack + STACK_SIZE;
+  uintptr_t sp = top;
+
+  int argc = 0;
+  int envc = 0;
+  if (argv != NULL) {
+    while (argv[argc] != NULL) argc++;
+  }
+  if (envp != NULL) {
+    while (envp[envc] != NULL) envc++;
+  }
+
+  char **argv_store = argc > 0 ? (char **)alloca(sizeof(char *) * argc) : NULL;
+  char **envp_store = envc > 0 ? (char **)alloca(sizeof(char *) * envc) : NULL;
+
+  for (int i = envc - 1; i >= 0; i--) {
+    size_t len = strlen(envp[i]) + 1;
+    sp -= len;
+    memcpy((void *)sp, envp[i], len);
+    envp_store[i] = (char *)sp;
+  }
+  for (int i = argc - 1; i >= 0; i--) {
+    size_t len = strlen(argv[i]) + 1;
+    sp -= len;
+    memcpy((void *)sp, argv[i], len);
+    argv_store[i] = (char *)sp;
+  }
+
+  sp &= ~(uintptr_t)(sizeof(uintptr_t) - 1);
+
+  sp -= sizeof(uintptr_t);
+  *(uintptr_t *)sp = 0;
+  for (int i = envc - 1; i >= 0; i--) {
+    sp -= sizeof(uintptr_t);
+    *(uintptr_t *)sp = (uintptr_t)envp_store[i];
+  }
+
+  sp -= sizeof(uintptr_t);
+  *(uintptr_t *)sp = 0;
+  for (int i = argc - 1; i >= 0; i--) {
+    sp -= sizeof(uintptr_t);
+    *(uintptr_t *)sp = (uintptr_t)argv_store[i];
+  }
+
+  sp -= sizeof(uintptr_t);
+  *(uintptr_t *)sp = argc;
+  return sp;
+}
+
 void naive_uload(PCB *pcb, const char *filename) {
   uintptr_t entry = loader(pcb, filename);
   Log("Jump to entry = %p", entry);
   ((void(*)())entry) ();
 }
 
-void context_uload(PCB *pcb, const char *filename) {
+void context_uload(PCB *pcb, const char *filename, char *const argv[], char *const envp[]) {
   uintptr_t entry = loader(pcb, filename);
   Area kstack = { .start = pcb->stack, .end = pcb->stack + STACK_SIZE };
   pcb->cp = ucontext(NULL, kstack, (void *)entry);
-  pcb->cp->GPRx = (uintptr_t)heap.end;
+  pcb->cp->GPRx = build_user_stack(argv, envp);
 }

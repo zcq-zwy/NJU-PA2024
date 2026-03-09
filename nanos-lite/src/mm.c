@@ -3,12 +3,17 @@
 static void *pf = NULL;
 
 void* new_page(size_t nr_page) {
-  return NULL;
+  void *p = pf;
+  pf += nr_page * PGSIZE;
+  assert(pf <= (void *)heap.end);
+  memset(p, 0, nr_page * PGSIZE);
+  return p;
 }
 
 #ifdef HAS_VME
 static void* pg_alloc(int n) {
-  return NULL;
+  assert(n > 0);
+  return new_page(n / PGSIZE);
 }
 #endif
 
@@ -16,7 +21,6 @@ void free_page(void *p) {
   panic("not implement yet");
 }
 
-/* The brk() system call handler. */
 int mm_brk(uintptr_t brk) {
   return 0;
 }
@@ -26,5 +30,6 @@ void init_mm() {
   Log("free physical pages starting from %p", pf);
 
 #ifdef HAS_VME
+  vme_init(pg_alloc, free_page);
 #endif
 }
