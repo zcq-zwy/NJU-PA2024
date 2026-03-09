@@ -112,6 +112,7 @@ static void sh_ls() {
     "/bin/busybox",
     "/bin/cat",
     "/bin/printenv",
+    "/usr/bin/wc",
     "/bin/hello",
     "/bin/timer-test",
     "/bin/event-test",
@@ -226,7 +227,7 @@ static void sh_handle_cmd(const char *cmd) {
 }
 
 void builtin_sh_run() {
-  if (getenv("PATH") == NULL) setenv("PATH", "/bin", 0);
+  if (getenv("PATH") == NULL) setenv("PATH", "/bin:/usr/bin", 0);
   sh_banner();
   sh_prompt();
 
