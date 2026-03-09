@@ -29,6 +29,7 @@ _start:
   jal call_main
 
 #elif defined(__riscv)
+  li sp, 0x87f00000
   mv s0, zero
   jal call_main
 

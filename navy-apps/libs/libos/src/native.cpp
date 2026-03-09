@@ -201,11 +201,12 @@ ssize_t read(int fd, void *buf, size_t count) {
     }
     return 0;
   } else if (fd == sbctl_fd) {
-    // return the free space of sb_fifo
     int used;
     ioctl(sb_fifo[0], FIONREAD, &used);
     int free = pipe_size - used;
-    return snprintf((char *)buf, count, "%d", free);
+    assert(count >= sizeof(int));
+    memcpy(buf, &free, sizeof(int));
+    return sizeof(int);
   }
   return glibc_read(fd, buf, count);
 }

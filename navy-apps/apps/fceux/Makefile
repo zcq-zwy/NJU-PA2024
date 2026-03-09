@@ -1,6 +1,6 @@
-FCEUX_PATH = $(AM_HOME)/../fceux
+FCEUX_PATH = $(NAVY_HOME)/../fceux-am
 ifeq ($(wildcard $(FCEUX_PATH)/src/x6502.cpp),)
-  $(error Please set $$FCEUX_PATH in the Makefile to a valid path of a FCEUX repo)
+  
 else
   $(shell mkdir -p $(NAVY_HOME)/fsimg/share/games)
   $(shell ln -sf -T $(FCEUX_PATH)/nes/rom $(NAVY_HOME)/fsimg/share/games/nes)
