@@ -1,5 +1,6 @@
 #include <common.h>
 #include <fs.h>
+#include <proc.h>
 #include <sys/time.h>
 
 #include "syscall.h"
@@ -121,8 +122,9 @@ void do_syscall(Context *c) {
 
   switch (a[0]) {
     case SYS_exit:
-      STRACE_LOG("strace: syscall exit -> halt(%d)", a[1]);
-      halt(a[1]);
+      STRACE_LOG("strace: syscall exit(%d) -> execve(\"/bin/nterm\")", a[1]);
+      naive_uload(NULL, "/bin/nterm");
+      panic("SYS_exit should not return after reloading /bin/nterm");
       break;
     case SYS_yield:
       c->GPRx = 0;
@@ -161,6 +163,11 @@ void do_syscall(Context *c) {
     case SYS_brk:
       c->GPRx = 0;
       STRACE_LOG("strace: syscall brk -> ret=%d", c->GPRx);
+      break;
+    case SYS_execve:
+      STRACE_LOG("strace: syscall execve -> filename=\"%s\"", (const char *)a[1]);
+      naive_uload(NULL, (const char *)a[1]);
+      panic("SYS_execve should not return");
       break;
     case SYS_gettimeofday: {
       struct timeval *tv = (struct timeval *)a[1];

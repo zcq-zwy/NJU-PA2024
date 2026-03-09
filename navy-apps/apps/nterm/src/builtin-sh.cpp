@@ -3,6 +3,8 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdlib.h>
+#include <errno.h>
+#include <string.h>
 #include <SDL.h>
 
 char handle_key(SDL_Event *ev);
@@ -121,6 +123,36 @@ static void sh_ls() {
   }
 }
 
+static bool sh_setenv(char *arg) {
+  char *eq = strchr(arg, '=');
+  if (eq == NULL || eq == arg) return false;
+
+  *eq = 0;
+  int ret = setenv(arg, eq + 1, 1);
+  *eq = '=';
+  if (ret != 0) {
+    sh_printf("setenv failed: %s", arg);
+    char nl = 10;
+    term->write(&nl, 1);
+  }
+  return true;
+}
+
+static void sh_exec(int argc, char *argv[]) {
+  int cmd_idx = 0;
+  while (cmd_idx < argc && sh_setenv(argv[cmd_idx])) {
+    cmd_idx ++;
+  }
+
+  if (cmd_idx >= argc) return;
+
+  SDL_CloseAudio();
+  execvp(argv[cmd_idx], &argv[cmd_idx]);
+  sh_printf("execvp failed: %s (errno=%d)", argv[cmd_idx], errno);
+  char nl = 10;
+  term->write(&nl, 1);
+}
+
 static void sh_sleep(int ms) {
   if (ms < 0) ms = 0;
   uint32_t start = SDL_GetTicks();
@@ -182,12 +214,12 @@ static void sh_handle_cmd(const char *cmd) {
     _exit(code);
   }
   else {
-    sh_printf("Unknown command: %s\n", argv[0]);
-    sh_printf("Type 'help' for available commands.\n");
+    sh_exec(argc, argv);
   }
 }
 
 void builtin_sh_run() {
+  if (getenv("PATH") == NULL) setenv("PATH", "/bin", 0);
   sh_banner();
   sh_prompt();
 
