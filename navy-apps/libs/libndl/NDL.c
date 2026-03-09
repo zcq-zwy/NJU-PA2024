@@ -16,6 +16,7 @@ static int canvas_w = 0, canvas_h = 0;
 static int canvas_x = 0, canvas_y = 0;
 static int present_w = 0, present_h = 0;
 static int present_x = 0, present_y = 0;
+static int scale_mode = 1;
 static uint32_t *stretch_buf = NULL;
 static size_t stretch_buf_cap = 0;
 static uint32_t boot_time = 0;
@@ -70,6 +71,13 @@ void NDL_OpenCanvas(int *w, int *h) {
   get_screen_size();
   printf("screen size: %d x %d\n", screen_w, screen_h);
 
+  scale_mode = 1;
+  const char *scale_env = getenv("NDL_SCALE");
+  if (scale_env != NULL) {
+    if (strcmp(scale_env, "0") == 0) scale_mode = 0;
+    else if (strcmp(scale_env, "integer") == 0) scale_mode = 2;
+  }
+
   canvas_w = screen_w;
   canvas_h = screen_h;
   present_w = screen_w;
@@ -86,12 +94,25 @@ void NDL_OpenCanvas(int *w, int *h) {
     canvas_h = *h;
   }
 
-  if (getenv("NWM_APP")) {
+  if (scale_mode == 0 || getenv("NWM_APP")) {
     assert(canvas_w <= screen_w && canvas_h <= screen_h);
     present_w = canvas_w;
     present_h = canvas_h;
     present_x = (screen_w - present_w) / 2;
     present_y = (screen_h - present_h) / 2;
+  } else if (scale_mode == 2) {
+    assert(canvas_w > 0 && canvas_h > 0);
+    int scale_x = screen_w / canvas_w;
+    int scale_y = screen_h / canvas_h;
+    int scale = (scale_x < scale_y ? scale_x : scale_y);
+    if (scale < 1) scale = 1;
+    present_w = canvas_w * scale;
+    present_h = canvas_h * scale;
+    present_x = (screen_w - present_w) / 2;
+    present_y = (screen_h - present_h) / 2;
+  }
+
+  if (getenv("NWM_APP")) {
 
     int fbctl = 4;
     fbdev = 5;
