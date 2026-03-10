@@ -23,6 +23,9 @@
 #define PTE_R          0x002
 #define PTE_W          0x004
 #define PTE_X          0x008
+#define PTE_U          0x010
+#define PTE_A          0x040
+#define PTE_D          0x080
 
 static inline paddr_t pte_addr(word_t pte) {
   return (pte >> 10) << 12;
@@ -46,15 +49,27 @@ paddr_t isa_mmu_translate(vaddr_t vaddr, int len, int type) {
   paddr_t pt = pte_addr(pde);
   word_t pte = paddr_read(pt + vpn0 * sizeof(word_t), sizeof(word_t));
   if (!(pte & PTE_V)) return MEM_RET_FAIL;
+  if (!(pte & PTE_A)) return MEM_RET_FAIL;
+  if (type == MEM_TYPE_WRITE && !(pte & PTE_D)) return MEM_RET_FAIL;
+  if (cpu.priv == RISCV_PRIV_U && !(pte & PTE_U)) return MEM_RET_FAIL;
 
   switch (type) {
-    case MEM_TYPE_IFETCH: if (!(pte & PTE_X)) return MEM_RET_FAIL; break;
-    case MEM_TYPE_READ:   if (!(pte & PTE_R)) return MEM_RET_FAIL; break;
-    case MEM_TYPE_WRITE:  if (!(pte & PTE_W)) return MEM_RET_FAIL; break;
-    default: break;
+    case MEM_TYPE_IFETCH:
+      if (!(pte & PTE_X)) return MEM_RET_FAIL;
+      break;
+    case MEM_TYPE_READ:
+      if (!(pte & PTE_R) && !((cpu.mstatus & MSTATUS_MXR) && (pte & PTE_X))) {
+        return MEM_RET_FAIL;
+      }
+      break;
+    case MEM_TYPE_WRITE:
+      if (!(pte & PTE_W)) return MEM_RET_FAIL;
+      break;
+    default:
+      break;
   }
 
   paddr_t pa = pte_addr(pte) | off;
-  assert(pa == vaddr);
+  if (vaddr >= 0x80000000) assert(pa == vaddr);
   return pa;
 }

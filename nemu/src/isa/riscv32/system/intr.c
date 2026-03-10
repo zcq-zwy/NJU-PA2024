@@ -16,7 +16,13 @@
 #include <isa.h>
 #include <monitor/etrace.h>
 
+static inline word_t mstatus_with_mpp(word_t mstatus, word_t priv) {
+  return (mstatus & ~MSTATUS_MPP_MASK) | ((priv & 0x3) << MSTATUS_MPP_SHIFT);
+}
+
 word_t isa_raise_intr(word_t NO, vaddr_t epc) {
+  cpu.mstatus = mstatus_with_mpp(cpu.mstatus, cpu.priv);
+  cpu.priv = RISCV_PRIV_M;
   cpu.mcause = NO;
   cpu.mepc = epc;
   etrace_log(NO, epc, cpu.mtvec);

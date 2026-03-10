@@ -54,10 +54,23 @@
 
 #include <common.h>
 
+enum {
+  RISCV_PRIV_U = 0,
+  RISCV_PRIV_M = 3,
+};
+
+#define MSTATUS_MPP_SHIFT 11
+#define MSTATUS_MPP_MASK  (3u << MSTATUS_MPP_SHIFT)
+#define MSTATUS_MPP_U     (RISCV_PRIV_U << MSTATUS_MPP_SHIFT)
+#define MSTATUS_MPP_M     (RISCV_PRIV_M << MSTATUS_MPP_SHIFT)
+#define MSTATUS_SUM       (1u << 18)
+#define MSTATUS_MXR       (1u << 19)
+
 typedef struct {
   word_t gpr[MUXDEF(CONFIG_RVE, 16, 32)];
   vaddr_t pc;
   word_t mstatus, mtvec, mepc, mcause, satp;
+  uint8_t priv;
 } MUXDEF(CONFIG_RV64, riscv64_CPU_state, riscv32_CPU_state);
 
 // decode

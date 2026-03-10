@@ -64,6 +64,14 @@ static word_t *csr(uint32_t addr) {
   }
 }
 
+static inline word_t mstatus_get_mpp(word_t mstatus) {
+  return (mstatus & MSTATUS_MPP_MASK) >> MSTATUS_MPP_SHIFT;
+}
+
+static inline word_t mstatus_set_mpp(word_t mstatus, word_t priv) {
+  return (mstatus & ~MSTATUS_MPP_MASK) | ((priv & 0x3) << MSTATUS_MPP_SHIFT);
+}
+
 static int decode_exec(Decode *s) {
   s->dnpc = s->snpc;
 
@@ -129,9 +137,13 @@ static int decode_exec(Decode *s) {
   INSTPAT("0000001 ????? ????? 110 ????? 01100 11", rem   , R, if ((sword_t)src2 == 0) R(rd) = src1; else if ((sword_t)src1 == (sword_t)0x80000000 && (sword_t)src2 == -1) R(rd) = 0; else R(rd) = (sword_t)src1 % (sword_t)src2);
   INSTPAT("0000001 ????? ????? 111 ????? 01100 11", remu  , R, R(rd) = (src2 == 0) ? src1 : (src1 % src2));
 
-  INSTPAT("0000000 00000 00000 000 00000 11100 11", ecall , N, s->dnpc = isa_raise_intr(11, s->pc));
+  INSTPAT("0000000 00000 00000 000 00000 11100 11", ecall , N,
+      s->dnpc = isa_raise_intr(cpu.priv == RISCV_PRIV_U ? 8 : 11, s->pc));
   INSTPAT("0000000 00001 00000 000 00000 11100 11", ebreak, N, NEMUTRAP(s->pc, R(10)));
-  INSTPAT("0011000 00010 00000 000 00000 11100 11", mret  , N, s->dnpc = cpu.mepc);
+  INSTPAT("0011000 00010 00000 000 00000 11100 11", mret  , N,
+      cpu.priv = mstatus_get_mpp(cpu.mstatus);
+      cpu.mstatus = mstatus_set_mpp(cpu.mstatus, RISCV_PRIV_U);
+      s->dnpc = cpu.mepc);
   INSTPAT("??????? ????? ????? 001 ????? 11100 11", csrrw , I, word_t *p = csr(BITS(s->isa.inst, 31, 20)); word_t t = *p; *p = src1; R(rd) = t);
   INSTPAT("??????? ????? ????? 010 ????? 11100 11", csrrs , I, word_t *p = csr(BITS(s->isa.inst, 31, 20)); word_t t = *p; if (BITS(s->isa.inst, 19, 15) != 0) *p = t | src1; R(rd) = t);
   // fence: for single-core in-order NEMU, treat as no-op
