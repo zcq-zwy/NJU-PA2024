@@ -129,12 +129,9 @@ void do_syscall(Context *c) {
   }
 
   switch (a[0]) {
-    case SYS_exit: {
-      static char *nterm_argv[] = { "/bin/nterm", NULL };
-      STRACE_LOG("strace: syscall exit(%d) -> execve(\"/bin/nterm\")", a[1]);
-      c->GPRx = sys_execve("/bin/nterm", nterm_argv, NULL);
+    case SYS_exit:
+      halt(a[1]);
       break;
-    }
     case SYS_yield:
       c->GPRx = 0;
       STRACE_LOG("strace: syscall yield -> ret=%d", c->GPRx);
@@ -195,3 +192,5 @@ void do_syscall(Context *c) {
       panic("Unhandled syscall ID = %d", a[0]);
   }
 }
+
+

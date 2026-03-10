@@ -52,6 +52,24 @@ static void load_segment(int fd, const Elf_Phdr *phdr, uintptr_t load_bias) {
   memset((void *)(load_bias + phdr->p_vaddr + phdr->p_filesz), 0, phdr->p_memsz - phdr->p_filesz);
 }
 
+#ifdef HAS_VME
+static uint8_t *map_user(PCB *pcb, uintptr_t va, size_t size, int prot) {
+  assert(pcb != NULL && pcb->as.ptr != NULL);
+  assert(size > 0);
+
+  uintptr_t va_start = ROUNDDOWN(va, PGSIZE);
+  uintptr_t va_end = ROUNDUP(va + size, PGSIZE);
+  size_t nr_page = (va_end - va_start) / PGSIZE;
+  uint8_t *pa = (uint8_t *)new_page(nr_page);
+
+  for (size_t i = 0; i < nr_page; i++) {
+    map(&pcb->as, (void *)(va_start + i * PGSIZE), pa + i * PGSIZE, prot);
+  }
+
+  return pa + (va - va_start);
+}
+#endif
+
 static void relocate_dyn(uintptr_t load_bias, const Elf_Phdr *dyn_phdr) {
   if (dyn_phdr == NULL) return;
 
@@ -118,6 +136,11 @@ static int loader(PCB *pcb, const char *filename, uintptr_t *entry) {
   uintptr_t lo = (uintptr_t)-1;
   uintptr_t hi = 0;
   Elf_Phdr *dyn_phdr = NULL;
+#ifdef HAS_VME
+  bool use_vme = (pcb != NULL && pcb->as.ptr != NULL);
+#else
+  bool use_vme = false;
+#endif
 
   if (ehdr.e_type == ET_DYN) {
     for (int i = 0; i < ehdr.e_phnum; i++) {
@@ -130,19 +153,46 @@ static int loader(PCB *pcb, const char *filename, uintptr_t *entry) {
     }
 
     assert(lo != (uintptr_t)-1);
-    uintptr_t map_lo = ROUNDDOWN(lo, PGSIZE);
-    uintptr_t map_hi = ROUNDUP(hi, PGSIZE);
-    load_bias = (uintptr_t)new_page((map_hi - map_lo) / PGSIZE) - map_lo;
+#ifdef HAS_VME
+    if (use_vme) {
+      load_bias = (uintptr_t)pcb->as.area.start - ROUNDDOWN(lo, PGSIZE);
+    } else
+#endif
+    {
+      uintptr_t map_lo = ROUNDDOWN(lo, PGSIZE);
+      uintptr_t map_hi = ROUNDUP(hi, PGSIZE);
+      load_bias = (uintptr_t)new_page((map_hi - map_lo) / PGSIZE) - map_lo;
+    }
   }
+
+#ifdef HAS_VME
+  if (use_vme) {
+    assert(ehdr.e_type == ET_EXEC);
+  }
+#endif
 
   for (int i = 0; i < ehdr.e_phnum; i++) {
     if (phdrs[i].p_type != PT_LOAD) continue;
-    load_segment(fd, &phdrs[i], load_bias);
+#ifdef HAS_VME
+    if (use_vme) {
+      uintptr_t seg_va = load_bias + phdrs[i].p_vaddr;
+      uint8_t *seg = map_user(pcb, seg_va, phdrs[i].p_memsz, MMAP_READ | MMAP_WRITE);
+      fs_lseek(fd, phdrs[i].p_offset, SEEK_SET);
+      fs_read(fd, seg, phdrs[i].p_filesz);
+      memset(seg + phdrs[i].p_filesz, 0, phdrs[i].p_memsz - phdrs[i].p_filesz);
+    } else
+#endif
+    {
+      load_segment(fd, &phdrs[i], load_bias);
+    }
     uintptr_t seg_hi = load_bias + phdrs[i].p_vaddr + phdrs[i].p_memsz;
     if (seg_hi > pcb->max_brk) pcb->max_brk = seg_hi;
   }
 
   if (ehdr.e_type == ET_DYN) {
+#ifdef HAS_VME
+    assert(!use_vme);
+#endif
     relocate_dyn(load_bias, dyn_phdr);
   } else {
     assert(ehdr.e_type == ET_EXEC);
@@ -154,12 +204,8 @@ static int loader(PCB *pcb, const char *filename, uintptr_t *entry) {
   return 0;
 }
 
-static uintptr_t build_user_stack(char *const argv[], char *const envp[]) {
+static uintptr_t build_user_stack(PCB *pcb, char *const argv[], char *const envp[]) {
   const int stack_pages = STACK_SIZE / PGSIZE;
-  uint8_t *stack = (uint8_t *)new_page(stack_pages);
-  uintptr_t top = (uintptr_t)stack + STACK_SIZE;
-  uintptr_t sp = top;
-
   int argc = 0;
   int envc = 0;
   if (argv != NULL) {
@@ -171,6 +217,65 @@ static uintptr_t build_user_stack(char *const argv[], char *const envp[]) {
 
   char **argv_store = argc > 0 ? (char **)alloca(sizeof(char *) * argc) : NULL;
   char **envp_store = envc > 0 ? (char **)alloca(sizeof(char *) * envc) : NULL;
+
+#ifdef HAS_VME
+  if (pcb != NULL && pcb->as.ptr != NULL) {
+    uintptr_t ustack_end = (uintptr_t)pcb->as.area.end;
+    uintptr_t ustack_start = ustack_end - STACK_SIZE;
+    uint8_t *stack = (uint8_t *)new_page(stack_pages);
+    for (int i = 0; i < stack_pages; i++) {
+      map(&pcb->as, (void *)(ustack_start + i * PGSIZE), stack + i * PGSIZE, MMAP_READ | MMAP_WRITE);
+    }
+
+    uintptr_t sp = ustack_end;
+    uintptr_t ksp = (uintptr_t)stack + STACK_SIZE;
+
+    for (int i = envc - 1; i >= 0; i--) {
+      size_t len = strlen(envp[i]) + 1;
+      sp -= len;
+      ksp -= len;
+      memcpy((void *)ksp, envp[i], len);
+      envp_store[i] = (char *)sp;
+    }
+    for (int i = argc - 1; i >= 0; i--) {
+      size_t len = strlen(argv[i]) + 1;
+      sp -= len;
+      ksp -= len;
+      memcpy((void *)ksp, argv[i], len);
+      argv_store[i] = (char *)sp;
+    }
+
+    sp &= ~(uintptr_t)(sizeof(uintptr_t) - 1);
+    ksp &= ~(uintptr_t)(sizeof(uintptr_t) - 1);
+
+    sp -= sizeof(uintptr_t);
+    ksp -= sizeof(uintptr_t);
+    *(uintptr_t *)ksp = 0;
+    for (int i = envc - 1; i >= 0; i--) {
+      sp -= sizeof(uintptr_t);
+      ksp -= sizeof(uintptr_t);
+      *(uintptr_t *)ksp = (uintptr_t)envp_store[i];
+    }
+
+    sp -= sizeof(uintptr_t);
+    ksp -= sizeof(uintptr_t);
+    *(uintptr_t *)ksp = 0;
+    for (int i = argc - 1; i >= 0; i--) {
+      sp -= sizeof(uintptr_t);
+      ksp -= sizeof(uintptr_t);
+      *(uintptr_t *)ksp = (uintptr_t)argv_store[i];
+    }
+
+    sp -= sizeof(uintptr_t);
+    ksp -= sizeof(uintptr_t);
+    *(uintptr_t *)ksp = argc;
+    return sp;
+  }
+#endif
+
+  uint8_t *stack = (uint8_t *)new_page(stack_pages);
+  uintptr_t top = (uintptr_t)stack + STACK_SIZE;
+  uintptr_t sp = top;
 
   for (int i = envc - 1; i >= 0; i--) {
     size_t len = strlen(envp[i]) + 1;
@@ -217,10 +322,17 @@ void naive_uload(PCB *pcb, const char *filename) {
 int context_uload(PCB *pcb, const char *filename, char *const argv[], char *const envp[]) {
   uintptr_t entry = 0;
   pcb->max_brk = 0;
+#ifdef HAS_VME
+  protect(&pcb->as);
+#endif
   int ret = loader(pcb, filename, &entry);
   if (ret < 0) return ret;
   Area kstack = { .start = pcb->stack, .end = pcb->stack + STACK_SIZE };
+#ifdef HAS_VME
+  pcb->cp = ucontext(&pcb->as, kstack, (void *)entry);
+#else
   pcb->cp = ucontext(NULL, kstack, (void *)entry);
-  pcb->cp->GPRx = build_user_stack(argv, envp);
+#endif
+  pcb->cp->GPRx = build_user_stack(pcb, argv, envp);
   return 0;
 }

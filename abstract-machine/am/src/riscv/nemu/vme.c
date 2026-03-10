@@ -2,6 +2,7 @@
 #include <nemu.h>
 #include <klib.h>
 
+
 static AddrSpace kas = {};
 static void* (*pgalloc_usr)(int) = NULL;
 static void (*pgfree_usr)(void*) = NULL;
@@ -97,7 +98,7 @@ Context *ucontext(AddrSpace *as, Area kstack, void *entry) {
   Context *c = (Context *)(sp - sizeof(Context));
   *c = (Context) { 0 };
 
-  c->mstatus = 0;
+  c->mstatus = MSTATUS_SUM | MSTATUS_MXR;
   c->mepc = (uintptr_t)entry;
   c->pdir = (as == NULL ? NULL : as->ptr);
   return c;

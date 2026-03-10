@@ -6,7 +6,7 @@ static PCB pcb[MAX_NR_PROC] __attribute__((used)) = {};
 static PCB pcb_boot = {};
 PCB *current = NULL;
 
-static void context_kload(PCB *pcb, void (*entry)(void *), void *arg) {
+static void __attribute__((unused)) context_kload(PCB *pcb, void (*entry)(void *), void *arg) {
   Area kstack = { .start = pcb->stack, .end = pcb->stack + STACK_SIZE };
   pcb->cp = kcontext(kstack, entry, arg);
 }
@@ -30,9 +30,8 @@ void hello_fun(void *arg) {
 void init_proc() {
   Log("Initializing processes...");
 
-  context_kload(&pcb[0], hello_fun, (void *)"A");
-  static char *nterm_argv[] = { "/bin/nterm", NULL };
-  int ret = context_uload(&pcb[1], "/bin/nterm", nterm_argv, NULL);
+  static char *dummy_argv[] = { "/bin/dummy", NULL };
+  int ret = context_uload(&pcb[0], "/bin/dummy", dummy_argv, NULL);
   assert(ret == 0);
   switch_boot_pcb();
 }
@@ -42,11 +41,6 @@ Context* schedule(Context *prev) {
     current->cp = prev;
   }
 
-  if (current == &pcb_boot || current == &pcb[1]) {
-    current = &pcb[0];
-  } else {
-    current = &pcb[1];
-  }
-
+  current = &pcb[0];
   return current->cp;
 }

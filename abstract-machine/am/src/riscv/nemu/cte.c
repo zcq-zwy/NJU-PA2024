@@ -3,6 +3,8 @@
 #include <klib.h>
 #include <klib-macros.h>
 
+#define MSTATUS_MPP_M (3u << 11)
+
 static Context* (*user_handler)(Event, Context*) = NULL;
 
 void __am_get_cur_as(Context *c);
@@ -54,7 +56,7 @@ Context *kcontext(Area kstack, void (*entry)(void *), void *arg) {
   Context *c = (Context *)(sp - sizeof(Context));
   *c = (Context) { 0 };
 
-  c->mstatus = 0x1800;
+  c->mstatus = MSTATUS_MPP_M;
   c->mepc = (uintptr_t)__am_kcontext_start;
   c->gpr[2] = sp;
   c->GPR2 = (uintptr_t)arg;
