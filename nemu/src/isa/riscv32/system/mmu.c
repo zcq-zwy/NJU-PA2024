@@ -17,6 +17,44 @@
 #include <memory/vaddr.h>
 #include <memory/paddr.h>
 
+#define SATP_MODE_SV32 (1u << 31)
+#define SATP_PPN_MASK  0x003fffffu
+#define PTE_V          0x001
+#define PTE_R          0x002
+#define PTE_W          0x004
+#define PTE_X          0x008
+
+static inline paddr_t pte_addr(word_t pte) {
+  return (pte >> 10) << 12;
+}
+
 paddr_t isa_mmu_translate(vaddr_t vaddr, int len, int type) {
-  return MEM_RET_FAIL;
+  (void)len;
+  if ((cpu.satp & SATP_MODE_SV32) == 0) {
+    return vaddr;
+  }
+
+  paddr_t pgdir = (cpu.satp & SATP_PPN_MASK) << 12;
+  int vpn1 = BITS(vaddr, 31, 22);
+  int vpn0 = BITS(vaddr, 21, 12);
+  int off  = BITS(vaddr, 11, 0);
+
+  word_t pde = paddr_read(pgdir + vpn1 * sizeof(word_t), sizeof(word_t));
+  if (!(pde & PTE_V)) return MEM_RET_FAIL;
+  if (pde & (PTE_R | PTE_W | PTE_X)) return MEM_RET_FAIL;
+
+  paddr_t pt = pte_addr(pde);
+  word_t pte = paddr_read(pt + vpn0 * sizeof(word_t), sizeof(word_t));
+  if (!(pte & PTE_V)) return MEM_RET_FAIL;
+
+  switch (type) {
+    case MEM_TYPE_IFETCH: if (!(pte & PTE_X)) return MEM_RET_FAIL; break;
+    case MEM_TYPE_READ:   if (!(pte & PTE_R)) return MEM_RET_FAIL; break;
+    case MEM_TYPE_WRITE:  if (!(pte & PTE_W)) return MEM_RET_FAIL; break;
+    default: break;
+  }
+
+  paddr_t pa = pte_addr(pte) | off;
+  assert(pa == vaddr);
+  return pa;
 }

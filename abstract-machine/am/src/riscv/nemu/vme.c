@@ -65,6 +65,30 @@ void __am_switch(Context *c) {
 }
 
 void map(AddrSpace *as, void *va, void *pa, int prot) {
+  assert(as != NULL);
+  assert(as->ptr != NULL);
+  assert((uintptr_t)va % PGSIZE == 0);
+  assert((uintptr_t)pa % PGSIZE == 0);
+  if (as != &kas) {
+    assert(IN_RANGE(va, as->area));
+  }
+
+  uintptr_t vaddr = (uintptr_t)va;
+  PTE *pgdir = (PTE *)as->ptr;
+  int vpn1 = (vaddr >> 22) & 0x3ff;
+  int vpn0 = (vaddr >> 12) & 0x3ff;
+
+  if (!(pgdir[vpn1] & PTE_V)) {
+    PTE *pt = (PTE *)pgalloc_usr(PGSIZE);
+    assert(pt != NULL);
+    pgdir[vpn1] = ((uintptr_t)pt >> 12 << 10) | PTE_V;
+  }
+
+  PTE *pt = (PTE *)(((uintptr_t)pgdir[vpn1] >> 10) << 12);
+  PTE perm = PTE_V | PTE_R | PTE_W | PTE_X | PTE_A | PTE_D;
+  if (as != &kas) perm |= PTE_U;
+  pt[vpn0] = ((uintptr_t)pa >> 12 << 10) | perm;
+  (void)prot;
 }
 
 Context *ucontext(AddrSpace *as, Area kstack, void *entry) {
