@@ -167,7 +167,7 @@ void do_syscall(Context *c) {
       }
       break;
     case SYS_brk:
-      c->GPRx = 0;
+      c->GPRx = mm_brk(a[1]);
       STRACE_LOG("strace: syscall brk -> ret=%d", c->GPRx);
       break;
     case SYS_execve:

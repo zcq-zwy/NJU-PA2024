@@ -70,10 +70,10 @@ static uint8_t *map_user(PCB *pcb, uintptr_t va, size_t size, int prot) {
 }
 #endif
 
-static void relocate_dyn(uintptr_t load_bias, const Elf_Phdr *dyn_phdr) {
+static void relocate_dyn(uintptr_t access_bias, uintptr_t runtime_bias, const Elf_Phdr *dyn_phdr) {
   if (dyn_phdr == NULL) return;
 
-  Elf_Dyn *dyn = (Elf_Dyn *)(load_bias + dyn_phdr->p_vaddr);
+  Elf_Dyn *dyn = (Elf_Dyn *)(access_bias + dyn_phdr->p_vaddr);
   uintptr_t rela_addr = 0;
   uintptr_t symtab_addr = 0;
   size_t rela_size = 0;
@@ -94,18 +94,18 @@ static void relocate_dyn(uintptr_t load_bias, const Elf_Phdr *dyn_phdr) {
   assert(rela_ent == sizeof(Elf_Rela));
   assert(sym_ent == sizeof(Elf_Sym));
 
-  Elf_Sym *symtab = (symtab_addr == 0 ? NULL : (Elf_Sym *)(load_bias + symtab_addr));
+  Elf_Sym *symtab = (symtab_addr == 0 ? NULL : (Elf_Sym *)(access_bias + symtab_addr));
   size_t nr_rela = rela_size / rela_ent;
-  Elf_Rela *rela = (Elf_Rela *)(load_bias + rela_addr);
+  Elf_Rela *rela = (Elf_Rela *)(access_bias + rela_addr);
   for (size_t i = 0; i < nr_rela; i++) {
     switch (ELF_R_TYPE(rela[i].r_info)) {
       case R_RISCV_RELATIVE:
-        *(uintptr_t *)(load_bias + rela[i].r_offset) = load_bias + rela[i].r_addend;
+        *(uintptr_t *)(access_bias + rela[i].r_offset) = runtime_bias + rela[i].r_addend;
         break;
       case R_RISCV_32: {
         assert(symtab != NULL);
         Elf_Sym *sym = &symtab[ELF_R_SYM(rela[i].r_info)];
-        *(uint32_t *)(load_bias + rela[i].r_offset) = (uint32_t)(load_bias + sym->st_value + rela[i].r_addend);
+        *(uint32_t *)(access_bias + rela[i].r_offset) = (uint32_t)(runtime_bias + sym->st_value + rela[i].r_addend);
         break;
       }
       default:
@@ -132,9 +132,12 @@ static int loader(PCB *pcb, const char *filename, uintptr_t *entry) {
   fs_lseek(fd, ehdr.e_phoff, SEEK_SET);
   fs_read(fd, phdrs, ehdr.e_phnum * sizeof(Elf_Phdr));
 
-  uintptr_t load_bias = 0;
+  uintptr_t user_bias = 0;
+  uintptr_t host_bias = 0;
   uintptr_t lo = (uintptr_t)-1;
   uintptr_t hi = 0;
+  uintptr_t map_lo = 0;
+  uintptr_t map_hi = 0;
   Elf_Phdr *dyn_phdr = NULL;
 #ifdef HAS_VME
   bool use_vme = (pcb != NULL && pcb->as.ptr != NULL);
@@ -153,53 +156,56 @@ static int loader(PCB *pcb, const char *filename, uintptr_t *entry) {
     }
 
     assert(lo != (uintptr_t)-1);
+    map_lo = ROUNDDOWN(lo, PGSIZE);
+    map_hi = ROUNDUP(hi, PGSIZE);
 #ifdef HAS_VME
     if (use_vme) {
-      load_bias = (uintptr_t)pcb->as.area.start - ROUNDDOWN(lo, PGSIZE);
+      size_t nr_page = (map_hi - map_lo) / PGSIZE;
+      uint8_t *image = (uint8_t *)new_page(nr_page);
+      user_bias = (uintptr_t)pcb->as.area.start - map_lo;
+      host_bias = (uintptr_t)image - map_lo;
+      for (size_t i = 0; i < nr_page; i++) {
+        map(&pcb->as, (void *)(user_bias + map_lo + i * PGSIZE), image + i * PGSIZE, MMAP_READ | MMAP_WRITE);
+      }
     } else
 #endif
     {
-      uintptr_t map_lo = ROUNDDOWN(lo, PGSIZE);
-      uintptr_t map_hi = ROUNDUP(hi, PGSIZE);
-      load_bias = (uintptr_t)new_page((map_hi - map_lo) / PGSIZE) - map_lo;
+      user_bias = (uintptr_t)new_page((map_hi - map_lo) / PGSIZE) - map_lo;
+      host_bias = user_bias;
     }
   }
-
-#ifdef HAS_VME
-  if (use_vme) {
-    assert(ehdr.e_type == ET_EXEC);
-  }
-#endif
 
   for (int i = 0; i < ehdr.e_phnum; i++) {
     if (phdrs[i].p_type != PT_LOAD) continue;
 #ifdef HAS_VME
     if (use_vme) {
-      uintptr_t seg_va = load_bias + phdrs[i].p_vaddr;
-      uint8_t *seg = map_user(pcb, seg_va, phdrs[i].p_memsz, MMAP_READ | MMAP_WRITE);
+      uint8_t *seg = NULL;
+      if (ehdr.e_type == ET_DYN) {
+        seg = (uint8_t *)(host_bias + phdrs[i].p_vaddr);
+      } else {
+        uintptr_t seg_va = user_bias + phdrs[i].p_vaddr;
+        seg = map_user(pcb, seg_va, phdrs[i].p_memsz, MMAP_READ | MMAP_WRITE);
+      }
       fs_lseek(fd, phdrs[i].p_offset, SEEK_SET);
       fs_read(fd, seg, phdrs[i].p_filesz);
       memset(seg + phdrs[i].p_filesz, 0, phdrs[i].p_memsz - phdrs[i].p_filesz);
     } else
 #endif
     {
-      load_segment(fd, &phdrs[i], load_bias);
+      load_segment(fd, &phdrs[i], user_bias);
     }
-    uintptr_t seg_hi = load_bias + phdrs[i].p_vaddr + phdrs[i].p_memsz;
+    uintptr_t seg_hi = user_bias + phdrs[i].p_vaddr + phdrs[i].p_memsz;
     if (seg_hi > pcb->max_brk) pcb->max_brk = seg_hi;
   }
 
   if (ehdr.e_type == ET_DYN) {
-#ifdef HAS_VME
-    assert(!use_vme);
-#endif
-    relocate_dyn(load_bias, dyn_phdr);
+    relocate_dyn(host_bias, user_bias, dyn_phdr);
   } else {
     assert(ehdr.e_type == ET_EXEC);
   }
 
   fs_close(fd);
-  *entry = load_bias + ehdr.e_entry;
+  *entry = user_bias + ehdr.e_entry;
   pcb->max_brk = ROUNDUP(pcb->max_brk, PGSIZE);
   return 0;
 }

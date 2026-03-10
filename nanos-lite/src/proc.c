@@ -30,8 +30,8 @@ void hello_fun(void *arg) {
 void init_proc() {
   Log("Initializing processes...");
 
-  static char *dummy_argv[] = { "/bin/dummy", NULL };
-  int ret = context_uload(&pcb[0], "/bin/dummy", dummy_argv, NULL);
+  static char *dummy_argv[] = { "/bin/pal", NULL };
+  int ret = context_uload(&pcb[0], "/bin/pal", dummy_argv, NULL);
   assert(ret == 0);
   switch_boot_pcb();
 }

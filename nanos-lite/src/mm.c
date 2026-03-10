@@ -1,4 +1,5 @@
 #include <memory.h>
+#include <proc.h>
 
 static void *pf = NULL;
 
@@ -22,6 +23,20 @@ void free_page(void *p) {
 }
 
 int mm_brk(uintptr_t brk) {
+#ifdef HAS_VME
+  assert(current != NULL);
+  if (brk > current->max_brk) {
+    uintptr_t start = ROUNDUP(current->max_brk, PGSIZE);
+    uintptr_t end = ROUNDUP(brk, PGSIZE);
+    for (uintptr_t va = start; va < end; va += PGSIZE) {
+      void *pa = new_page(1);
+      map(&current->as, (void *)va, pa, MMAP_READ | MMAP_WRITE);
+    }
+    current->max_brk = brk;
+  }
+#else
+  (void)brk;
+#endif
   return 0;
 }
 
