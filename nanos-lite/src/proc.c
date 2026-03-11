@@ -5,6 +5,7 @@
 static PCB pcb[MAX_NR_PROC] __attribute__((used)) = {};
 static PCB pcb_boot = {};
 PCB *current = NULL;
+static int nr_proc = 0;
 
 static void __attribute__((unused)) context_kload(PCB *pcb, void (*entry)(void *), void *arg) {
   Area kstack = { .start = pcb->stack, .end = pcb->stack + STACK_SIZE };
@@ -30,9 +31,11 @@ void hello_fun(void *arg) {
 void init_proc() {
   Log("Initializing processes...");
 
-  static char *dummy_argv[] = { "/bin/pal", NULL };
-  int ret = context_uload(&pcb[0], "/bin/pal", dummy_argv, NULL);
+  static char *pal_argv[] = { "/bin/pal", NULL };
+  int ret = context_uload(&pcb[0], "/bin/pal", pal_argv, NULL);
   assert(ret == 0);
+  context_kload(&pcb[1], hello_fun, "A");
+  nr_proc = 2;
   switch_boot_pcb();
 }
 
@@ -41,6 +44,11 @@ Context* schedule(Context *prev) {
     current->cp = prev;
   }
 
-  current = &pcb[0];
+  if (current == &pcb_boot) {
+    current = &pcb[0];
+  } else {
+    int index = current - pcb;
+    current = &pcb[(index + 1) % nr_proc];
+  }
   return current->cp;
 }
