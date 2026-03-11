@@ -11,5 +11,7 @@
 
 void* new_page(size_t);
 int mm_brk(uintptr_t brk);
+size_t mm_used_bytes(void);
+size_t mm_total_bytes(void);
 
 #endif

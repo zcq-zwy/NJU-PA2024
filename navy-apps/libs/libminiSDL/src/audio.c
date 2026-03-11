@@ -14,6 +14,7 @@ static int audio_paused = 1;
 static uint32_t callback_interval = 0;
 static uint32_t last_callback = 0;
 static int in_callback = 0;
+static int audio_locked = 0;
 
 static int bytes_per_sample(uint16_t format) {
   switch (format) {
@@ -35,7 +36,7 @@ static uint32_t read_le32(const uint8_t *buf) {
 }
 
 void __SDL_AudioCallbackHelper(void) {
-  if (!audio_opened || audio_paused || audio_spec.callback == NULL || in_callback) {
+  if (!audio_opened || audio_paused || audio_spec.callback == NULL || in_callback || audio_locked > 0) {
     return;
   }
 
@@ -117,6 +118,7 @@ void SDL_CloseAudio() {
   callback_interval = 0;
   last_callback = 0;
   in_callback = 0;
+  audio_locked = 0;
   memset(&audio_spec, 0, sizeof(audio_spec));
 }
 
@@ -257,7 +259,11 @@ void SDL_FreeWAV(uint8_t *wav_audio_buf) {
 }
 
 void SDL_LockAudio() {
+  audio_locked++;
 }
 
 void SDL_UnlockAudio() {
+  if (audio_locked > 0) {
+    audio_locked--;
+  }
 }

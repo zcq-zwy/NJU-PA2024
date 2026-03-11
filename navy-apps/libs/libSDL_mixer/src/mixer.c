@@ -336,6 +336,7 @@ int Mix_OpenAudio(int frequency, uint16_t format, int channels_count, int chunks
 }
 
 void Mix_CloseAudio() {
+  SDL_LockAudio();
   mixer_opened = 0;
   music_playing = 0;
   current_music = NULL;
@@ -343,6 +344,7 @@ void Mix_CloseAudio() {
   channels = NULL;
   allocated_channels = 0;
   memset(&mixer_spec, 0, sizeof(mixer_spec));
+  SDL_UnlockAudio();
   SDL_CloseAudio();
 }
 
@@ -383,6 +385,7 @@ void Mix_FreeChunk(Mix_Chunk *chunk) {
 
 int Mix_AllocateChannels(int numchans) {
   if (numchans < 0) numchans = 0;
+  SDL_LockAudio();
   free(channels);
   channels = NULL;
   allocated_channels = numchans;
@@ -393,12 +396,14 @@ int Mix_AllocateChannels(int numchans) {
       channels[i].volume = MIX_MAX_VOLUME;
     }
   }
+  SDL_UnlockAudio();
   return allocated_channels;
 }
 
 int Mix_PlayChannel(int channel, Mix_Chunk *chunk, int loops) {
   if (channels == NULL || chunk == NULL || allocated_channels <= 0) return -1;
 
+  SDL_LockAudio();
   if (channel == -1) {
     for (int i = 0; i < allocated_channels; i++) {
       if (!channels[i].playing) {
@@ -407,55 +412,73 @@ int Mix_PlayChannel(int channel, Mix_Chunk *chunk, int loops) {
       }
     }
   }
-  if (channel < 0 || channel >= allocated_channels) return -1;
+  if (channel < 0 || channel >= allocated_channels) {
+    SDL_UnlockAudio();
+    return -1;
+  }
 
   channels[channel].chunk = chunk;
   channels[channel].pos = 0;
   channels[channel].loops = loops;
   channels[channel].playing = 1;
+  SDL_UnlockAudio();
   return channel;
 }
 
 int Mix_Volume(int channel, int volume) {
   if (channels == NULL || allocated_channels <= 0) return 0;
 
+  SDL_LockAudio();
   if (channel == -1) {
     for (int i = 0; i < allocated_channels; i++) {
       if (volume >= 0) {
         channels[i].volume = volume > MIX_MAX_VOLUME ? MIX_MAX_VOLUME : volume;
       }
     }
+    SDL_UnlockAudio();
     return volume;
   }
 
-  if (channel < 0 || channel >= allocated_channels) return 0;
+  if (channel < 0 || channel >= allocated_channels) {
+    SDL_UnlockAudio();
+    return 0;
+  }
   int old = channels[channel].volume;
   if (volume >= 0) {
     channels[channel].volume = volume > MIX_MAX_VOLUME ? MIX_MAX_VOLUME : volume;
   }
+  SDL_UnlockAudio();
   return old;
 }
 
 void Mix_Pause(int channel) {
   if (channels == NULL || allocated_channels <= 0) return;
 
+  SDL_LockAudio();
   if (channel == -1) {
     for (int i = 0; i < allocated_channels; i++) {
       channels[i].playing = 0;
       channels[i].chunk = NULL;
       channels[i].pos = 0;
     }
+    SDL_UnlockAudio();
     return;
   }
 
-  if (channel < 0 || channel >= allocated_channels) return;
+  if (channel < 0 || channel >= allocated_channels) {
+    SDL_UnlockAudio();
+    return;
+  }
   channels[channel].playing = 0;
   channels[channel].chunk = NULL;
   channels[channel].pos = 0;
+  SDL_UnlockAudio();
 }
 
 void Mix_ChannelFinished(void (*channel_finished)(int channel)) {
+  SDL_LockAudio();
   channel_finished_cb = channel_finished;
+  SDL_UnlockAudio();
 }
 
 Mix_Music *Mix_LoadMUS(const char *file) {
@@ -486,10 +509,12 @@ Mix_Music *Mix_LoadMUS_RW(SDL_RWops *src) {
 
 void Mix_FreeMusic(Mix_Music *music) {
   if (music == NULL) return;
+  SDL_LockAudio();
   if (current_music == music) {
     music_playing = 0;
     current_music = NULL;
   }
+  SDL_UnlockAudio();
   free(music->buf);
   free(music);
 }
@@ -499,24 +524,30 @@ int Mix_PlayMusic(Mix_Music *music, int loops) {
     set_error("music is not ready");
     return -1;
   }
+  SDL_LockAudio();
   music->pos = 0;
   music->loops = loops;
   current_music = music;
   music_playing = 1;
+  SDL_UnlockAudio();
   return 0;
 }
 
 int Mix_VolumeMusic(int volume) {
+  SDL_LockAudio();
   int old = music_volume;
   if (volume >= 0) {
     music_volume = volume > MIX_MAX_VOLUME ? MIX_MAX_VOLUME : volume;
   }
+  SDL_UnlockAudio();
   return old;
 }
 
 int Mix_HaltMusic() {
+  SDL_LockAudio();
   music_playing = 0;
   current_music = NULL;
+  SDL_UnlockAudio();
   return 0;
 }
 
@@ -525,7 +556,9 @@ int Mix_PlayingMusic() {
 }
 
 void Mix_HookMusicFinished(void (*music_finished)(void)) {
+  SDL_LockAudio();
   music_finished_cb = music_finished;
+  SDL_UnlockAudio();
 }
 
 int Mix_SetMusicPosition(double position) {

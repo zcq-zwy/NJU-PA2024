@@ -17,7 +17,7 @@ typedef struct {
   bool used;
 } FdInfo;
 
-enum {FD_STDIN, FD_STDOUT, FD_STDERR, FD_EVENTS, FD_DISPINFO, FD_FB, FD_SBCTL, FD_SB};
+enum {FD_STDIN, FD_STDOUT, FD_STDERR, FD_EVENTS, FD_DISPINFO, FD_SYSINFO, FD_FB, FD_SBCTL, FD_SB};
 
 enum { FS_ENOENT = 2, FS_EMFILE = 24, NR_OPEN_FILES = 64 };
 enum { NR_RESERVED_FD = FD_SB + 1 };
@@ -25,6 +25,7 @@ enum { NR_RESERVED_FD = FD_SB + 1 };
 size_t serial_write(const void *buf, size_t offset, size_t len);
 size_t events_read(void *buf, size_t offset, size_t len);
 size_t dispinfo_read(void *buf, size_t offset, size_t len);
+size_t sysinfo_read(void *buf, size_t offset, size_t len);
 size_t fb_write(const void *buf, size_t offset, size_t len);
 size_t sbctl_read(void *buf, size_t offset, size_t len);
 size_t sbctl_write(const void *buf, size_t offset, size_t len);
@@ -48,6 +49,7 @@ static Finfo file_table[] __attribute__((used)) = {
   [FD_STDERR]   = {"stderr",         0, 0, NULL,         serial_write },
   [FD_EVENTS]   = {"/dev/events",    0, 0, events_read,  invalid_write},
   [FD_DISPINFO] = {"/proc/dispinfo", 0, 0, dispinfo_read,invalid_write},
+  [FD_SYSINFO]  = {"/proc/sysinfo",  0, 0, sysinfo_read, invalid_write},
   [FD_FB]       = {"/dev/fb",        0, 0, invalid_read, fb_write     },
   [FD_SBCTL]    = {"/dev/sbctl",     0, 0, sbctl_read,   sbctl_write  },
   [FD_SB]       = {"/dev/sb",        0, 0, invalid_read, sb_write     },
@@ -158,4 +160,18 @@ int fs_close(int fd) {
 const char *fs_get_filename(int fd) {
   if (fd < 0 || fd >= NR_OPEN_FILES || !fd_table[fd].used) return "invalid-fd";
   return file_table[fd_table[fd].file_index].name;
+}
+
+size_t fs_storage_used_bytes(void) {
+  size_t used = 0;
+  for (int i = NR_RESERVED_FD; i < LENGTH(file_table); i++) {
+    size_t end = file_table[i].disk_offset + file_table[i].size;
+    if (end > used) used = end;
+  }
+  return used;
+}
+
+size_t fs_storage_total_bytes(void) {
+  extern size_t get_ramdisk_size(void);
+  return get_ramdisk_size();
 }

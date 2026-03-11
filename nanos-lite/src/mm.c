@@ -2,6 +2,7 @@
 #include <proc.h>
 
 static void *pf = NULL;
+static void *pf_start = NULL;
 
 void* new_page(size_t nr_page) {
   void *p = pf;
@@ -42,9 +43,18 @@ int mm_brk(uintptr_t brk) {
 
 void init_mm() {
   pf = (void *)ROUNDUP(heap.start, PGSIZE);
+  pf_start = pf;
   Log("free physical pages starting from %p", pf);
 
 #ifdef HAS_VME
   vme_init(pg_alloc, free_page);
 #endif
+}
+
+size_t mm_used_bytes(void) {
+  return (size_t)((uintptr_t)pf - (uintptr_t)pf_start);
+}
+
+size_t mm_total_bytes(void) {
+  return (size_t)((uintptr_t)heap.end - (uintptr_t)pf_start);
 }

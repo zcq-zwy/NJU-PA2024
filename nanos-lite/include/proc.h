@@ -10,7 +10,7 @@ enum {
   PCB_PAL = 0,
   PCB_BIRD,
   PCB_NSLIDER,
-  PCB_HELLO,
+  PCB_SYSMON,
 };
 
 typedef union {
@@ -30,5 +30,6 @@ void switch_fg_pcb(int index);
 void switch_boot_pcb(void);
 void init_proc(void);
 Context *schedule(Context *prev);
+void proc_sched_stats(uint64_t *fg_runs, uint64_t *bg_runs, uint64_t *total_runs);
 
 #endif
