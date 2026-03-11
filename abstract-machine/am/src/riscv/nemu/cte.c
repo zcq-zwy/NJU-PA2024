@@ -4,6 +4,8 @@
 #include <klib-macros.h>
 
 #define MSTATUS_MPP_M (3u << 11)
+#define MSTATUS_MPIE  (1u << 7)
+#define IRQ_TIMER     0x80000007u
 
 static Context* (*user_handler)(Event, Context*) = NULL;
 
@@ -16,6 +18,9 @@ Context* __am_irq_handle(Context *c) {
 
     Event ev = {0};
     switch (c->mcause) {
+      case IRQ_TIMER:
+        ev.event = EVENT_IRQ_TIMER;
+        break;
       case 8:
       case 11:
         c->mepc += 4;
@@ -56,7 +61,7 @@ Context *kcontext(Area kstack, void (*entry)(void *), void *arg) {
   Context *c = (Context *)(sp - sizeof(Context));
   *c = (Context) { 0 };
 
-  c->mstatus = MSTATUS_MPP_M;
+  c->mstatus = MSTATUS_MPP_M | MSTATUS_MPIE;
   c->mepc = (uintptr_t)__am_kcontext_start;
   c->gpr[2] = sp;
   c->GPR2 = (uintptr_t)arg;
@@ -75,8 +80,15 @@ void yield() {
 }
 
 bool ienabled() {
-  return false;
+  uintptr_t mstatus = 0;
+  asm volatile("csrr %0, mstatus" : "=r"(mstatus));
+  return (mstatus & (1u << 3)) != 0;
 }
 
 void iset(bool enable) {
+  if (enable) {
+    asm volatile("csrsi mstatus, 8");
+  } else {
+    asm volatile("csrci mstatus, 8");
+  }
 }

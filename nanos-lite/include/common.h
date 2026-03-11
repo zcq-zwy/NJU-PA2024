@@ -5,7 +5,7 @@
 #define HAS_CTE
 #define HAS_VME
 #define MULTIPROGRAM
-//#define TIME_SHARING
+#define TIME_SHARING
 //#define CONFIG_STRACE
 
 #include <am.h>

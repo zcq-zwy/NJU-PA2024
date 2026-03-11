@@ -16,11 +16,16 @@
 #include <isa.h>
 #include <monitor/etrace.h>
 
+#define IRQ_TIMER 0x80000007u
+
 static inline word_t mstatus_with_mpp(word_t mstatus, word_t priv) {
   return (mstatus & ~MSTATUS_MPP_MASK) | ((priv & 0x3) << MSTATUS_MPP_SHIFT);
 }
 
 word_t isa_raise_intr(word_t NO, vaddr_t epc) {
+  if (cpu.mstatus & MSTATUS_MIE) cpu.mstatus |= MSTATUS_MPIE;
+  else cpu.mstatus &= ~MSTATUS_MPIE;
+  cpu.mstatus &= ~MSTATUS_MIE;
   cpu.mstatus = mstatus_with_mpp(cpu.mstatus, cpu.priv);
   cpu.priv = RISCV_PRIV_M;
   cpu.mcause = NO;
@@ -30,5 +35,9 @@ word_t isa_raise_intr(word_t NO, vaddr_t epc) {
 }
 
 word_t isa_query_intr() {
+  if (cpu.INTR && (cpu.mstatus & MSTATUS_MIE)) {
+    cpu.INTR = false;
+    return IRQ_TIMER;
+  }
   return INTR_EMPTY;
 }

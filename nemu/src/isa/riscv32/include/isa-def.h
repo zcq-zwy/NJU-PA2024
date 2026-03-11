@@ -63,6 +63,8 @@ enum {
 #define MSTATUS_MPP_MASK  (3u << MSTATUS_MPP_SHIFT)
 #define MSTATUS_MPP_U     (RISCV_PRIV_U << MSTATUS_MPP_SHIFT)
 #define MSTATUS_MPP_M     (RISCV_PRIV_M << MSTATUS_MPP_SHIFT)
+#define MSTATUS_MIE       (1u << 3)
+#define MSTATUS_MPIE      (1u << 7)
 #define MSTATUS_SUM       (1u << 18)
 #define MSTATUS_MXR       (1u << 19)
 
@@ -71,6 +73,7 @@ typedef struct {
   vaddr_t pc;
   word_t mstatus, mtvec, mepc, mcause, satp;
   uint8_t priv;
+  bool INTR;
 } MUXDEF(CONFIG_RV64, riscv64_CPU_state, riscv32_CPU_state);
 
 // decode

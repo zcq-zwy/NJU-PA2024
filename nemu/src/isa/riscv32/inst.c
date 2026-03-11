@@ -142,6 +142,9 @@ static int decode_exec(Decode *s) {
   INSTPAT("0000000 00001 00000 000 00000 11100 11", ebreak, N, NEMUTRAP(s->pc, R(10)));
   INSTPAT("0011000 00010 00000 000 00000 11100 11", mret  , N,
       cpu.priv = mstatus_get_mpp(cpu.mstatus);
+      if (cpu.mstatus & MSTATUS_MPIE) cpu.mstatus |= MSTATUS_MIE;
+      else cpu.mstatus &= ~MSTATUS_MIE;
+      cpu.mstatus |= MSTATUS_MPIE;
       cpu.mstatus = mstatus_set_mpp(cpu.mstatus, RISCV_PRIV_U);
       s->dnpc = cpu.mepc);
   INSTPAT("??????? ????? ????? 001 ????? 11100 11", csrrw , I, word_t *p = csr(BITS(s->isa.inst, 31, 20)); word_t t = *p; *p = src1; R(rd) = t);
