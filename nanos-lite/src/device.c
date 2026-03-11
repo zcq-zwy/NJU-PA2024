@@ -1,4 +1,5 @@
 #include <common.h>
+#include <proc.h>
 
 #define NAME(key)   [AM_KEY_##key] = #key,
 
@@ -22,6 +23,14 @@ size_t events_read(void *buf, size_t offset, size_t len) {
 
   AM_INPUT_KEYBRD_T ev = io_read(AM_INPUT_KEYBRD);
   if (ev.keycode == AM_KEY_NONE) return 0;
+
+  if (ev.keydown) {
+    switch (ev.keycode) {
+      case AM_KEY_F1: switch_fg_pcb(PCB_PAL); return 0;
+      case AM_KEY_F2: switch_fg_pcb(PCB_BIRD); return 0;
+      case AM_KEY_F3: switch_fg_pcb(PCB_NSLIDER); return 0;
+    }
+  }
 
   char event[64];
   int n = snprintf(event, sizeof(event), "k%c %s\n", ev.keydown ? 'd' : 'u', keyname[ev.keycode]);
