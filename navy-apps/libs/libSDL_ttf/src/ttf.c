@@ -9,22 +9,33 @@ int TTF_Init() {
   return 0;
 }
 
-TTF_Font* TTF_OpenFont(const char *file, int ptsize) {
-  SDL_RWops *f = SDL_RWFromFile(file, "r");
+static TTF_Font *load_font_from_rw(SDL_RWops *f, int ptsize, int freesrc) {
   if (f == NULL) return NULL;
   size_t size = SDL_RWsize(f);
+  if (size == 0) {
+    if (freesrc) SDL_RWclose(f);
+    return NULL;
+  }
   void *buf = malloc(size);
   assert(buf);
   size_t nread = SDL_RWread(f, buf, size, 1);
-  assert(nread == 1);
-  SDL_RWclose(f);
+  if (freesrc) SDL_RWclose(f);
+  if (nread != 1) {
+    free(buf);
+    return NULL;
+  }
 
   stbtt_fontinfo *finfo = malloc(sizeof(*finfo));
   assert(finfo);
   int ret = stbtt_InitFont(finfo, buf, stbtt_GetFontOffsetForIndex(buf,0));
-  assert(ret == 1);
+  if (ret != 1) {
+    free(finfo);
+    free(buf);
+    return NULL;
+  }
 
   TTF_Font *font = malloc(sizeof(*font));
+  assert(font);
   font->finfo = finfo;
   font->file.buf = buf;
   font->file.size = size;
@@ -41,9 +52,12 @@ TTF_Font* TTF_OpenFont(const char *file, int ptsize) {
   return font;
 }
 
+TTF_Font* TTF_OpenFont(const char *file, int ptsize) {
+  return load_font_from_rw(SDL_RWFromFile(file, "r"), ptsize, 1);
+}
+
 TTF_Font *TTF_OpenFontRW(SDL_RWops *src, int freesrc, int ptsize) {
-  assert(0);
-  return NULL;
+  return load_font_from_rw(src, ptsize, freesrc);
 }
 
 int TTF_GlyphMetrics(TTF_Font *font, Uint16 ch, int *minx, int *maxx, int *miny, int *maxy, int *advance) {

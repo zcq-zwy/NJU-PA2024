@@ -15,7 +15,7 @@
 #include <sys/mman.h>
 #include <sys/ioctl.h>
 
-//#define MODE_800x600
+#define MODE_800x600
 
 #define FPS 60
 #define WINDOW_W 800
@@ -36,10 +36,12 @@ static FILE *(*glibc_fopen)(const char *path, const char *mode) = NULL;
 static int (*glibc_open)(const char *path, int flags, ...) = NULL;
 static ssize_t (*glibc_read)(int fd, void *buf, size_t count) = NULL;
 static ssize_t (*glibc_write)(int fd, const void *buf, size_t count) = NULL;
+static int (*glibc_close)(int fd) = NULL;
 static int (*glibc_execve)(const char *filename, char *const argv[], char *const envp[]) = NULL;
 
 static SDL_Window *window = NULL;
 static SDL_Surface *surface = NULL;
+static bool headless_video = false;
 static int dummy_fd = -1;
 static int dispinfo_fd = -1;
 static int fb_memfd = -1;
@@ -49,8 +51,32 @@ static int sbctl_fd = -1;
 static uint32_t *fb = NULL;
 static char fsimg_path[512] = "";
 
+enum {
+  FD_NONE = 0,
+  FD_DISPINFO,
+  FD_EVENTS,
+  FD_FB,
+  FD_SB,
+  FD_SBCTL,
+};
+
+#define MAX_TRACK_FD 4096
+static uint8_t fd_kind[MAX_TRACK_FD] = {};
+
+static inline void mark_fd(int fd, uint8_t kind) {
+  if (fd >= 0 && fd < MAX_TRACK_FD) fd_kind[fd] = kind;
+}
+
+static inline uint8_t get_fd_kind(int fd) {
+  return (fd >= 0 && fd < MAX_TRACK_FD) ? fd_kind[fd] : FD_NONE;
+}
+
+static inline void clear_fd(int fd) {
+  if (fd >= 0 && fd < MAX_TRACK_FD) fd_kind[fd] = FD_NONE;
+}
+
 static inline void get_fsimg_path(char *newpath, const char *path) {
-  sprintf(newpath, "%s%s", fsimg_path, path);
+  snprintf(newpath, 512, "%s%s", fsimg_path, path);
 }
 
 #define _KEYS(_) \
@@ -91,7 +117,11 @@ static int event_thread(void *args) {
 }
 
 static Uint32 texture_sync(Uint32 interval, void *param) {
-  SDL_BlitScaled(surface, NULL, SDL_GetWindowSurface(window), NULL);
+  SDL_Surface *win_surface = SDL_GetWindowSurface(window);
+  if (window == NULL || surface == NULL || win_surface == NULL) {
+    return interval;
+  }
+  SDL_BlitScaled(surface, NULL, win_surface, NULL);
   SDL_UpdateWindowSurface(window);
   return interval;
 }
@@ -113,12 +143,19 @@ static void open_display() {
   lseek(fb_memfd, 0, SEEK_SET);
 
   SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_TIMER);
-  window = SDL_CreateWindow("Simulated Nanos Application",
-      SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, WINDOW_W, WINDOW_H, SDL_WINDOW_OPENGL);
+  const char *video_driver = SDL_GetCurrentVideoDriver();
+  headless_video = (video_driver != NULL && strcmp(video_driver, "dummy") == 0);
+  if (!headless_video) {
+    window = SDL_CreateWindow("Simulated Nanos Application",
+        SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, WINDOW_W, WINDOW_H, 0);
+    assert(window != NULL);
+  }
   surface = SDL_CreateRGBSurfaceFrom(fb, disp_w, disp_h, 32, disp_w * sizeof(uint32_t),
       RMASK, GMASK, BMASK, AMASK);
-  SDL_CreateThread(event_thread, "event thread", nullptr);
-  SDL_AddTimer(1000 / FPS, texture_sync, NULL);
+  if (!headless_video) {
+    SDL_CreateThread(event_thread, "event thread", nullptr);
+    SDL_AddTimer(1000 / FPS, texture_sync, NULL);
+  }
 }
 
 static void open_event() {
@@ -159,15 +196,25 @@ FILE *fopen(const char *path, const char *mode) {
 
 int open(const char *path, int flags, ...) {
   if (strcmp(path, "/proc/dispinfo") == 0) {
-    return dispinfo_fd;
+    int fd = dup(dispinfo_fd);
+    mark_fd(fd, FD_DISPINFO);
+    return fd;
   } else if (strcmp(path, "/dev/events") == 0) {
-    return evt_fd;
+    int fd = dup(evt_fd);
+    mark_fd(fd, FD_EVENTS);
+    return fd;
   } else if (strcmp(path, "/dev/fb") == 0) {
-    return fb_memfd;
+    int fd = dup(fb_memfd);
+    mark_fd(fd, FD_FB);
+    return fd;
   } else if (strcmp(path, "/dev/sb") == 0) {
-    return sb_fifo[1];
+    int fd = dup(sb_fifo[1]);
+    mark_fd(fd, FD_SB);
+    return fd;
   } else if (strcmp(path, "/dev/sbctl") == 0) {
-    return sbctl_fd;
+    int fd = dup(sbctl_fd);
+    mark_fd(fd, FD_SBCTL);
+    return fd;
   } else {
     char newpath[512];
     return glibc_open(redirect_path(newpath, path), flags);
@@ -175,11 +222,12 @@ int open(const char *path, int flags, ...) {
 }
 
 ssize_t read(int fd, void *buf, size_t count) {
-  if (fd == dispinfo_fd) {
+  switch (get_fd_kind(fd)) {
+  case FD_DISPINFO:
     // This does not strictly conform to `navy-apps/README.md`.
     // But it should be enough for real usage. Modify it if necessary.
     return snprintf((char *)buf, count, "WIDTH: %d\nHEIGHT: %d\n", disp_w, disp_h);
-  } else if (fd == evt_fd) {
+  case FD_EVENTS: {
     int has_key = 0;
     SDL_Event ev = {};
     SDL_LockMutex(key_queue_lock);
@@ -200,7 +248,8 @@ ssize_t read(int fd, void *buf, size_t count) {
       if (name) return snprintf((char *)buf, count, "k%c %s\n", keydown ? 'd' : 'u', name);
     }
     return 0;
-  } else if (fd == sbctl_fd) {
+  }
+  case FD_SBCTL: {
     int used;
     ioctl(sb_fifo[0], FIONREAD, &used);
     int free = pipe_size - used;
@@ -208,11 +257,14 @@ ssize_t read(int fd, void *buf, size_t count) {
     memcpy(buf, &free, sizeof(int));
     return sizeof(int);
   }
+  default:
+    break;
+  }
   return glibc_read(fd, buf, count);
 }
 
 ssize_t write(int fd, const void *buf, size_t count) {
-  if (fd == sbctl_fd) {
+  if (get_fd_kind(fd) == FD_SBCTL) {
     // open audio
     const int *args = (const int *)buf;
     assert(count >= sizeof(int) * 3);
@@ -228,6 +280,11 @@ ssize_t write(int fd, const void *buf, size_t count) {
     return count;
   }
   return glibc_write(fd, buf, count);
+}
+
+int close(int fd) {
+  clear_fd(fd);
+  return glibc_close(fd);
 }
 
 int execve(const char *filename, char *const argv[], char *const envp[]) {
@@ -246,12 +303,15 @@ struct Init {
     assert(glibc_read != NULL);
     glibc_write = (ssize_t (*)(int fd, const void *buf, size_t count))dlsym(RTLD_NEXT, "write");
     assert(glibc_write != NULL);
+    glibc_close = (int (*)(int))dlsym(RTLD_NEXT, "close");
+    assert(glibc_close != NULL);
     glibc_execve = (int(*)(const char*, char *const [], char *const []))dlsym(RTLD_NEXT, "execve");
     assert(glibc_execve != NULL);
 
     dummy_fd = memfd_create("dummy", 0);
     assert(dummy_fd != -1);
     dispinfo_fd = dummy_fd;
+    mark_fd(dispinfo_fd, FD_DISPINFO);
 
     char *navyhome = getenv("NAVY_HOME");
     assert(navyhome);
@@ -267,6 +327,10 @@ struct Init {
       open_event();
     }
     open_audio();
+    mark_fd(evt_fd, FD_EVENTS);
+    mark_fd(fb_memfd, FD_FB);
+    mark_fd(sb_fifo[1], FD_SB);
+    mark_fd(sbctl_fd, FD_SBCTL);
   }
   ~Init() {
   }

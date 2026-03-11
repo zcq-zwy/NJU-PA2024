@@ -23,16 +23,28 @@ static int64_t rw_file_seek(SDL_RWops *f, int64_t offset, int whence) {
 
 static size_t rw_file_read(SDL_RWops *f, void *buf, size_t size, size_t nmemb) {
   if (size == 0) return 0;
-  ssize_t ret = read(rw_fd(f), buf, size * nmemb);
-  if (ret <= 0) return 0;
-  return ret / size;
+  size_t total = size * nmemb;
+  size_t done = 0;
+  uint8_t *ptr = (uint8_t *)buf;
+  while (done < total) {
+    ssize_t ret = read(rw_fd(f), ptr + done, total - done);
+    if (ret <= 0) break;
+    done += ret;
+  }
+  return done / size;
 }
 
 static size_t rw_file_write(SDL_RWops *f, const void *buf, size_t size, size_t nmemb) {
   if (size == 0) return 0;
-  ssize_t ret = write(rw_fd(f), buf, size * nmemb);
-  if (ret <= 0) return 0;
-  return ret / size;
+  size_t total = size * nmemb;
+  size_t done = 0;
+  const uint8_t *ptr = (const uint8_t *)buf;
+  while (done < total) {
+    ssize_t ret = write(rw_fd(f), ptr + done, total - done);
+    if (ret <= 0) break;
+    done += ret;
+  }
+  return done / size;
 }
 
 static int rw_file_close(SDL_RWops *f) {
@@ -141,4 +153,8 @@ SDL_RWops* SDL_RWFromMem(void *mem, int size) {
   rw->mem.base = mem;
   rw->mem.size = size;
   return rw;
+}
+
+SDL_RWops* SDL_RWFromConstMem(const void *mem, int size) {
+  return SDL_RWFromMem((void *)mem, size);
 }
