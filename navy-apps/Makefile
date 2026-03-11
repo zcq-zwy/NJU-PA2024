@@ -132,7 +132,7 @@ $(APP): $(LINKAGE)
 	@$(LD) $(LDFLAGS) -o $@ $(WL)--start-group $^ $(WL)--end-group
 
 ### Rule (archive): objects (`*.o`) -> `ARCHIVE.a` (ar)
-$(ARCHIVE): $(LINKAGE)
+$(ARCHIVE): $(filter-out $(ARCHIVE),$(LINKAGE))
 	@echo + AR "->" $(shell realpath $@ --relative-to .)
 	@$(AR) rcs --thin $@ $^
 
