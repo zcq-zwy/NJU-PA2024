@@ -8,10 +8,18 @@
 #include <string.h>
 
 struct Mix_Music {
-  uint8_t *buf;
-  uint32_t len;
-  uint32_t pos;
+  uint8_t *file_buf;
+  int file_len;
+  stb_vorbis *vorbis;
+  int src_rate;
+  int src_channels;
   int loops;
+  uint8_t *cache_buf;
+  uint32_t cache_len;
+  uint32_t cache_pos;
+  uint32_t cache_cap;
+  int16_t *decode_buf;
+  uint32_t decode_cap_samples;
 };
 
 struct Mix_Chunk {
@@ -25,6 +33,7 @@ typedef struct {
   int loops;
   int volume;
   int playing;
+  int paused;
 } Mix_ChannelState;
 
 static SDL_AudioSpec mixer_spec = {};
@@ -75,15 +84,35 @@ static int read_rwops_all(SDL_RWops *src, uint8_t **out_buf, int *out_len) {
   return 0;
 }
 
-static void scale_s16_samples(int16_t *samples, int count, int volume) {
-  if (volume >= MIX_MAX_VOLUME) return;
-  if (volume <= 0) {
-    memset(samples, 0, count * sizeof(*samples));
-    return;
+static int convert_pcm_s16_to_spec(const int16_t *src, int src_frames, int src_rate, int src_channels,
+    int16_t *dst, int dst_rate, int dst_channels) {
+  if (src == NULL || dst == NULL || src_frames <= 0 || src_rate <= 0 || src_channels <= 0 ||
+      dst_rate <= 0 || dst_channels <= 0) {
+    return -1;
   }
-  for (int i = 0; i < count; i++) {
-    samples[i] = samples[i] * volume / MIX_MAX_VOLUME;
+  int dst_frames = (int)(((int64_t)src_frames * dst_rate + src_rate - 1) / src_rate);
+  if (dst_frames <= 0) dst_frames = src_frames;
+  for (int dst_frame = 0; dst_frame < dst_frames; dst_frame++) {
+    int src_frame = (int)((int64_t)dst_frame * src_rate / dst_rate);
+    if (src_frame >= src_frames) src_frame = src_frames - 1;
+    const int16_t *src_frame_ptr = src + src_frame * src_channels;
+
+    for (int dst_ch = 0; dst_ch < dst_channels; dst_ch++) {
+      int16_t sample = 0;
+      if (src_channels == 1 && dst_channels >= 1) {
+        sample = src_frame_ptr[0];
+      } else if (src_channels >= 2 && dst_channels == 1) {
+        int mixed = 0;
+        for (int src_ch = 0; src_ch < src_channels; src_ch++) mixed += src_frame_ptr[src_ch];
+        sample = mixed / src_channels;
+      } else {
+        int src_ch = dst_ch < src_channels ? dst_ch : (src_channels - 1);
+        sample = src_frame_ptr[src_ch];
+      }
+      dst[dst_frame * dst_channels + dst_ch] = sample;
+    }
   }
+  return dst_frames;
 }
 
 static int convert_pcm_s16(
@@ -106,55 +135,42 @@ static int convert_pcm_s16(
   int dst_channels = mixer_spec.channels;
   int dst_frames = (int)(((int64_t)src_frames * dst_rate + src_rate - 1) / src_rate);
   if (dst_frames <= 0) dst_frames = src_frames;
-
   uint32_t total_samples = (uint32_t)dst_frames * dst_channels;
   int16_t *dst = (int16_t *)malloc(total_samples * sizeof(int16_t));
   assert(dst != NULL);
-
-  for (int dst_frame = 0; dst_frame < dst_frames; dst_frame++) {
-    int src_frame = (int)((int64_t)dst_frame * src_rate / dst_rate);
-    if (src_frame >= src_frames) src_frame = src_frames - 1;
-    const int16_t *src_frame_ptr = src + src_frame * src_channels;
-
-    for (int dst_ch = 0; dst_ch < dst_channels; dst_ch++) {
-      int16_t sample = 0;
-      if (src_channels == 1 && dst_channels >= 1) {
-        sample = src_frame_ptr[0];
-      } else if (src_channels >= 2 && dst_channels == 1) {
-        int mixed = 0;
-        for (int src_ch = 0; src_ch < src_channels; src_ch++) mixed += src_frame_ptr[src_ch];
-        sample = mixed / src_channels;
-      } else {
-        int src_ch = dst_ch < src_channels ? dst_ch : (src_channels - 1);
-        sample = src_frame_ptr[src_ch];
-      }
-      dst[dst_frame * dst_channels + dst_ch] = sample;
-    }
+  int written_frames = convert_pcm_s16_to_spec(src, src_frames, src_rate, src_channels, dst, dst_rate, dst_channels);
+  if (written_frames < 0) {
+    free(dst);
+    set_error("pcm conversion failed");
+    return -1;
   }
-
   *out_buf = (uint8_t *)dst;
-  *out_len = total_samples * sizeof(int16_t);
+  *out_len = (uint32_t)written_frames * dst_channels * sizeof(int16_t);
   return 0;
 }
 
 static Mix_Music *load_ogg_music_from_memory(const uint8_t *file_buf, int file_len) {
-  int src_channels = 0;
-  int src_rate = 0;
-  short *pcm = NULL;
-  int src_frames = stb_vorbis_decode_memory(file_buf, file_len, &src_channels, &src_rate, &pcm);
-  if (src_frames < 0 || pcm == NULL) {
-    set_error("stb_vorbis_decode_memory failed");
+  int error = 0;
+  stb_vorbis *vorbis = stb_vorbis_open_memory(file_buf, file_len, &error, NULL);
+  if (vorbis == NULL) {
+    set_error("stb_vorbis_open_memory failed");
+    return NULL;
+  }
+
+  stb_vorbis_info info = stb_vorbis_get_info(vorbis);
+  if (info.sample_rate == 0 || info.channels <= 0) {
+    stb_vorbis_close(vorbis);
+    set_error("invalid vorbis info");
     return NULL;
   }
 
   Mix_Music *music = (Mix_Music *)calloc(1, sizeof(Mix_Music));
   assert(music != NULL);
-  if (convert_pcm_s16(pcm, src_frames, src_rate, src_channels, &music->buf, &music->len) != 0) {
-    free(pcm);
-    free(music);
-    return NULL;
-  }
-  free(pcm);
+  music->file_buf = (uint8_t *)file_buf;
+  music->file_len = file_len;
+  music->vorbis = vorbis;
+  music->src_rate = info.sample_rate;
+  music->src_channels = info.channels;
   return music;
 }
 
@@ -230,22 +246,96 @@ static Mix_Chunk *load_wav_chunk_from_memory(const uint8_t *file_buf, int file_l
   return chunk;
 }
 
+static void reset_music_cache(Mix_Music *music) {
+  if (music == NULL) return;
+  music->cache_len = 0;
+  music->cache_pos = 0;
+}
+
+static void finish_music_playback(void) {
+  Mix_Music *finished_music = current_music;
+  music_playing = 0;
+  current_music = NULL;
+  if (finished_music != NULL) {
+    reset_music_cache(finished_music);
+  }
+  if (music_finished_cb != NULL) {
+    music_finished_cb();
+  }
+}
+
 static void advance_music_loop(void) {
   if (current_music == NULL) return;
   if (current_music->loops == -1) {
-    current_music->pos = 0;
+    if (!stb_vorbis_seek_start(current_music->vorbis)) {
+      finish_music_playback();
+      return;
+    }
+    reset_music_cache(current_music);
     return;
   }
   if (current_music->loops > 0) {
     current_music->loops--;
-    current_music->pos = 0;
+    if (!stb_vorbis_seek_start(current_music->vorbis)) {
+      finish_music_playback();
+      return;
+    }
+    reset_music_cache(current_music);
     return;
   }
-  music_playing = 0;
-  current_music = NULL;
-  if (music_finished_cb != NULL) {
-    music_finished_cb();
+  finish_music_playback();
+}
+
+static int ensure_music_cache_capacity(Mix_Music *music, uint32_t need_bytes) {
+  if (music->cache_cap >= need_bytes) return 0;
+  uint32_t new_cap = need_bytes;
+  uint8_t *new_buf = (uint8_t *)realloc(music->cache_buf, new_cap);
+  assert(new_buf != NULL);
+  music->cache_buf = new_buf;
+  music->cache_cap = new_cap;
+  return 0;
+}
+
+static int ensure_music_decode_capacity(Mix_Music *music, uint32_t need_samples) {
+  if (music->decode_cap_samples >= need_samples) return 0;
+  int16_t *new_buf = (int16_t *)realloc(music->decode_buf, need_samples * sizeof(int16_t));
+  assert(new_buf != NULL);
+  music->decode_buf = new_buf;
+  music->decode_cap_samples = need_samples;
+  return 0;
+}
+
+#define MUSIC_STREAM_FRAMES 1024
+
+static int refill_music_cache(Mix_Music *music) {
+  if (music == NULL || music->vorbis == NULL) return 0;
+  if (!mixer_opened || mixer_spec.format != AUDIO_S16SYS) return 0;
+
+  uint32_t src_samples = MUSIC_STREAM_FRAMES * music->src_channels;
+  ensure_music_decode_capacity(music, src_samples);
+
+  int decoded_frames = stb_vorbis_get_samples_short_interleaved(
+      music->vorbis, music->src_channels, music->decode_buf, src_samples);
+  if (decoded_frames <= 0) {
+    return 0;
   }
+
+  int dst_frames = (int)(((int64_t)decoded_frames * mixer_spec.freq + music->src_rate - 1) / music->src_rate);
+  if (dst_frames <= 0) dst_frames = decoded_frames;
+  uint32_t dst_bytes = (uint32_t)dst_frames * mixer_spec.channels * sizeof(int16_t);
+  ensure_music_cache_capacity(music, dst_bytes);
+
+  int written_frames = convert_pcm_s16_to_spec(
+      music->decode_buf, decoded_frames, music->src_rate, music->src_channels,
+      (int16_t *)music->cache_buf, mixer_spec.freq, mixer_spec.channels);
+  if (written_frames < 0) {
+    set_error("music pcm conversion failed");
+    return 0;
+  }
+
+  music->cache_len = (uint32_t)written_frames * mixer_spec.channels * sizeof(int16_t);
+  music->cache_pos = 0;
+  return music->cache_len > 0;
 }
 
 static void mix_music_into_stream(uint8_t *stream, int len) {
@@ -253,17 +343,21 @@ static void mix_music_into_stream(uint8_t *stream, int len) {
 
   int mixed = 0;
   while (mixed < len && music_playing && current_music != NULL) {
-    if (current_music->pos >= current_music->len) {
-      advance_music_loop();
-      if (!music_playing || current_music == NULL) break;
+    if (current_music->cache_pos >= current_music->cache_len) {
+      if (!refill_music_cache(current_music)) {
+        advance_music_loop();
+        if (!music_playing || current_music == NULL) break;
+        if (!refill_music_cache(current_music)) {
+          finish_music_playback();
+          break;
+        }
+      }
     }
-    int remain = current_music->len - current_music->pos;
+    int remain = current_music->cache_len - current_music->cache_pos;
     int mix_len = len - mixed;
     if (mix_len > remain) mix_len = remain;
-
-    memcpy(stream + mixed, current_music->buf + current_music->pos, mix_len);
-    scale_s16_samples((int16_t *)(stream + mixed), mix_len / (int)sizeof(int16_t), music_volume);
-    current_music->pos += mix_len;
+    SDL_MixAudio(stream + mixed, current_music->cache_buf + current_music->cache_pos, mix_len, music_volume);
+    current_music->cache_pos += mix_len;
     mixed += mix_len;
   }
 }
@@ -272,7 +366,7 @@ static void mix_channels_into_stream(uint8_t *stream, int len) {
   if (channels == NULL) return;
   for (int channel = 0; channel < allocated_channels; channel++) {
     Mix_ChannelState *state = &channels[channel];
-    if (!state->playing || state->chunk == NULL || state->volume <= 0) continue;
+    if (!state->playing || state->paused || state->chunk == NULL || state->volume <= 0) continue;
 
     int mixed = 0;
     while (mixed < len && state->playing && state->chunk != NULL) {
@@ -421,6 +515,7 @@ int Mix_PlayChannel(int channel, Mix_Chunk *chunk, int loops) {
   channels[channel].pos = 0;
   channels[channel].loops = loops;
   channels[channel].playing = 1;
+  channels[channel].paused = 0;
   SDL_UnlockAudio();
   return channel;
 }
@@ -457,9 +552,9 @@ void Mix_Pause(int channel) {
   SDL_LockAudio();
   if (channel == -1) {
     for (int i = 0; i < allocated_channels; i++) {
-      channels[i].playing = 0;
-      channels[i].chunk = NULL;
-      channels[i].pos = 0;
+      if (channels[i].playing) {
+        channels[i].paused = 1;
+      }
     }
     SDL_UnlockAudio();
     return;
@@ -469,10 +564,93 @@ void Mix_Pause(int channel) {
     SDL_UnlockAudio();
     return;
   }
+  if (channels[channel].playing) {
+    channels[channel].paused = 1;
+  }
+  SDL_UnlockAudio();
+}
+
+void Mix_Resume(int channel) {
+  if (channels == NULL || allocated_channels <= 0) return;
+
+  SDL_LockAudio();
+  if (channel == -1) {
+    for (int i = 0; i < allocated_channels; i++) {
+      if (channels[i].playing) {
+        channels[i].paused = 0;
+      }
+    }
+    SDL_UnlockAudio();
+    return;
+  }
+
+  if (channel < 0 || channel >= allocated_channels) {
+    SDL_UnlockAudio();
+    return;
+  }
+  if (channels[channel].playing) {
+    channels[channel].paused = 0;
+  }
+  SDL_UnlockAudio();
+}
+
+int Mix_Paused(int channel) {
+  if (channels == NULL || allocated_channels <= 0) return 0;
+
+  if (channel == -1) {
+    for (int i = 0; i < allocated_channels; i++) {
+      if (channels[i].playing && channels[i].paused) {
+        return 1;
+      }
+    }
+    return 0;
+  }
+
+  if (channel < 0 || channel >= allocated_channels) return 0;
+  return channels[channel].playing && channels[channel].paused;
+}
+
+int Mix_HaltChannel(int channel) {
+  if (channels == NULL || allocated_channels <= 0) return 0;
+
+  SDL_LockAudio();
+  if (channel == -1) {
+    for (int i = 0; i < allocated_channels; i++) {
+      channels[i].playing = 0;
+      channels[i].paused = 0;
+      channels[i].chunk = NULL;
+      channels[i].pos = 0;
+    }
+    SDL_UnlockAudio();
+    return 0;
+  }
+
+  if (channel < 0 || channel >= allocated_channels) {
+    SDL_UnlockAudio();
+    return -1;
+  }
   channels[channel].playing = 0;
+  channels[channel].paused = 0;
   channels[channel].chunk = NULL;
   channels[channel].pos = 0;
   SDL_UnlockAudio();
+  return 0;
+}
+
+int Mix_Playing(int channel) {
+  if (channels == NULL || allocated_channels <= 0) return 0;
+
+  if (channel == -1) {
+    for (int i = 0; i < allocated_channels; i++) {
+      if (channels[i].playing) {
+        return 1;
+      }
+    }
+    return 0;
+  }
+
+  if (channel < 0 || channel >= allocated_channels) return 0;
+  return channels[channel].playing;
 }
 
 void Mix_ChannelFinished(void (*channel_finished)(int channel)) {
@@ -503,7 +681,10 @@ Mix_Music *Mix_LoadMUS_RW(SDL_RWops *src) {
   if (ret != 0) return NULL;
 
   Mix_Music *music = load_ogg_music_from_memory(file_buf, file_len);
-  free(file_buf);
+  if (music == NULL) {
+    free(file_buf);
+    return NULL;
+  }
   return music;
 }
 
@@ -515,7 +696,10 @@ void Mix_FreeMusic(Mix_Music *music) {
     current_music = NULL;
   }
   SDL_UnlockAudio();
-  free(music->buf);
+  if (music->vorbis != NULL) stb_vorbis_close(music->vorbis);
+  free(music->file_buf);
+  free(music->cache_buf);
+  free(music->decode_buf);
   free(music);
 }
 
@@ -525,8 +709,13 @@ int Mix_PlayMusic(Mix_Music *music, int loops) {
     return -1;
   }
   SDL_LockAudio();
-  music->pos = 0;
+  reset_music_cache(music);
   music->loops = loops;
+  if (music->vorbis == NULL || !stb_vorbis_seek_start(music->vorbis)) {
+    SDL_UnlockAudio();
+    set_error("stb_vorbis_seek_start failed");
+    return -1;
+  }
   current_music = music;
   music_playing = 1;
   SDL_UnlockAudio();
