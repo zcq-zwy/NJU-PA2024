@@ -1,11 +1,19 @@
 #include <proc.h>
 
 #define MAX_NR_PROC 4
+#define PAL_SLICES   5
+#define HELLO_SLICES 1
 
 static PCB pcb[MAX_NR_PROC] __attribute__((used)) = {};
 static PCB pcb_boot = {};
 PCB *current = NULL;
 static int nr_proc = 0;
+static int slices_left = 0;
+
+static int proc_slices[MAX_NR_PROC] = {
+  [0] = PAL_SLICES,
+  [1] = HELLO_SLICES,
+};
 
 static void __attribute__((unused)) context_kload(PCB *pcb, void (*entry)(void *), void *arg) {
   Area kstack = { .start = pcb->stack, .end = pcb->stack + STACK_SIZE };
@@ -46,9 +54,16 @@ Context* schedule(Context *prev) {
 
   if (current == &pcb_boot) {
     current = &pcb[0];
+    slices_left = proc_slices[0];
   } else {
     int index = current - pcb;
-    current = &pcb[(index + 1) % nr_proc];
+    if (slices_left > 1) {
+      slices_left --;
+    } else {
+      index = (index + 1) % nr_proc;
+      current = &pcb[index];
+      slices_left = proc_slices[index];
+    }
   }
   return current->cp;
 }
