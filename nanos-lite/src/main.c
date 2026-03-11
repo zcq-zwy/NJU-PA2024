@@ -3,6 +3,7 @@
 void init_mm(void);
 void init_device(void);
 void init_ramdisk(void);
+void init_disk(void);
 void init_irq(void);
 void init_fs(void);
 void init_proc(void);
@@ -17,7 +18,11 @@ int main() {
 
   init_device();
 
+#if defined(__ISA_AM_NATIVE__) || defined(__ISA_NATIVE__)
+  init_disk();
+#else
   init_ramdisk();
+#endif
 
 #ifdef HAS_CTE
   init_irq();

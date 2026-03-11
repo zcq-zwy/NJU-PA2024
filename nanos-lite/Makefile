@@ -7,12 +7,15 @@ include $(AM_HOME)/Makefile
 
 ifeq ($(ARCH),native)
 ISA = am_native
+SRCS := $(filter-out src/ramdisk.c src/resources.S,$(SRCS))
 else
 INC_PATH += include $(NAVY_HOME)/libs/libc/include
 endif
 
+ifneq ($(ARCH),native)
 ./src/resources.S: $(RAMDISK_FILE)
 	@touch $@
+endif
 
 ifeq ($(HAS_NAVY),)
 files = $(RAMDISK_FILE) src/files.h src/syscall.h
@@ -25,7 +28,7 @@ ifeq ($(wildcard $(NAVY_HOME)/libs/libos/src/syscall.h),)
 endif
 
 update:
-	$(MAKE) -s -C $(NAVY_HOME) ISA=$(ISA) ramdisk
+	$(MAKE) -s -C $(NAVY_HOME) ISA=$(ISA) VME=$(VME) ramdisk
 	@ln -sf $(NAVY_HOME)/build/ramdisk.img $(RAMDISK_FILE)
 	@ln -sf $(NAVY_HOME)/build/ramdisk.h src/files.h
 	@ln -sf $(NAVY_HOME)/libs/libos/src/syscall.h src/syscall.h
