@@ -8,11 +8,8 @@
 #define DEFAULT_AUDIOBUF 4096
 #define MIX_MAX_VOLUME 128
 
-typedef struct {
-} Mix_Music;
-
-typedef struct {
-} Mix_Chunk;
+typedef struct Mix_Music Mix_Music;
+typedef struct Mix_Chunk Mix_Chunk;
 
 #ifdef __cplusplus
 extern "C" {
