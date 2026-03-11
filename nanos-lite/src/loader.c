@@ -340,7 +340,19 @@ int context_uload(PCB *pcb, const char *filename, char *const argv[], char *cons
   pcb->cp = ucontext(NULL, kstack, (void *)entry);
 #endif
   uintptr_t usp = build_user_stack(pcb, argv, envp);
+#if defined(__ISA_AM_NATIVE__) || defined(__ISA_NATIVE__)
+# if defined(__x86_64__)
+  pcb->cp->uc.uc_mcontext.gregs[REG_RSP] = usp;
+# elif defined(__aarch64__)
+  pcb->cp->uc.uc_mcontext.sp = usp;
+# elif defined(__riscv) && __riscv_xlen == 64
+  pcb->cp->uc.uc_mcontext.__gregs[REG_SP] = usp;
+# else
+#  error Unsupported native host architecture
+# endif
+#else
   pcb->cp->gpr[2] = usp;
+#endif
   pcb->cp->GPRx = usp;
   return 0;
 }
