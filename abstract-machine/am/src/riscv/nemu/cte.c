@@ -6,6 +6,7 @@
 #define MSTATUS_MPP_M (3u << 11)
 #define MSTATUS_MPIE  (1u << 7)
 #define IRQ_TIMER     0x80000007u
+#define CONTEXT_KERN  0u
 
 static Context* (*user_handler)(Event, Context*) = NULL;
 
@@ -48,6 +49,7 @@ void __am_panic_on_return() { panic("kernel context returns"); }
 bool cte_init(Context*(*handler)(Event, Context*)) {
   // initialize exception entry
   asm volatile("csrw mtvec, %0" : : "r"(__am_asm_trap));
+  asm volatile("csrw mscratch, zero");
 
   // register event handler
   user_handler = handler;
@@ -67,6 +69,7 @@ Context *kcontext(Area kstack, void (*entry)(void *), void *arg) {
   c->GPR2 = (uintptr_t)arg;
   c->GPR3 = (uintptr_t)entry;
   c->pdir = NULL;
+  c->np = CONTEXT_KERN;
 
   return c;
 }

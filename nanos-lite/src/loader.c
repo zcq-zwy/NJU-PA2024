@@ -339,6 +339,8 @@ int context_uload(PCB *pcb, const char *filename, char *const argv[], char *cons
 #else
   pcb->cp = ucontext(NULL, kstack, (void *)entry);
 #endif
-  pcb->cp->GPRx = build_user_stack(pcb, argv, envp);
+  uintptr_t usp = build_user_stack(pcb, argv, envp);
+  pcb->cp->gpr[2] = usp;
+  pcb->cp->GPRx = usp;
   return 0;
 }

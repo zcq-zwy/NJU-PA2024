@@ -3,6 +3,7 @@
 #include <klib.h>
 
 #define MSTATUS_MPIE (1u << 7)
+#define CONTEXT_USER 1u
 
 static AddrSpace kas = {};
 static void* (*pgalloc_usr)(int) = NULL;
@@ -102,5 +103,6 @@ Context *ucontext(AddrSpace *as, Area kstack, void *entry) {
   c->mstatus = MSTATUS_SUM | MSTATUS_MXR | MSTATUS_MPIE;
   c->mepc = (uintptr_t)entry;
   c->pdir = (as == NULL ? NULL : as->ptr);
+  c->np = CONTEXT_USER;
   return c;
 }
