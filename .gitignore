@@ -9,9 +9,12 @@
 !/am-kernels/**
 !/fceux-am/
 !/fceux-am/**
+!/third_party/
+!/third_party/**
 !Makefile
 !README.md
 !.gitignore
 !init.sh
+!run_xv6_nemu.sh
 /riscv-arch-test-am/
 /riscv-tests/
