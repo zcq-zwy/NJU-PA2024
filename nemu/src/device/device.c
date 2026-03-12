@@ -18,6 +18,11 @@
 #include <device/alarm.h>
 #ifndef CONFIG_TARGET_AM
 #include <SDL2/SDL.h>
+#include <stdlib.h>
+#include <fcntl.h>
+#include <sys/select.h>
+#include <termios.h>
+#include <unistd.h>
 #endif
 
 void init_map();
@@ -37,6 +42,70 @@ void init_alarm();
 void send_key(uint8_t, bool);
 void vga_update_screen();
 void xv6_clint_update();
+void xv6_uart_input_char(uint8_t ch);
+
+#ifndef CONFIG_TARGET_AM
+static bool xv6_stdin_ready = false;
+static bool xv6_stdin_is_tty = false;
+static int xv6_stdin_flags = -1;
+static struct termios xv6_stdin_termios = {};
+
+static void restore_xv6_uart_stdin(void) {
+#ifdef CONFIG_HAS_XV6_UART
+  if (!xv6_stdin_ready) return;
+  if (xv6_stdin_is_tty) {
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &xv6_stdin_termios);
+  }
+  if (xv6_stdin_flags >= 0) {
+    fcntl(STDIN_FILENO, F_SETFL, xv6_stdin_flags);
+  }
+#endif
+}
+
+static void init_xv6_uart_stdin(void) {
+#ifdef CONFIG_HAS_XV6_UART
+  xv6_stdin_flags = fcntl(STDIN_FILENO, F_GETFL, 0);
+  if (xv6_stdin_flags < 0) return;
+
+  xv6_stdin_is_tty = isatty(STDIN_FILENO);
+  if (xv6_stdin_is_tty) {
+    if (tcgetattr(STDIN_FILENO, &xv6_stdin_termios) != 0) return;
+    struct termios raw = xv6_stdin_termios;
+    raw.c_lflag &= ~(ICANON | ECHO);
+    raw.c_iflag &= ~(IXON | ICRNL);
+    raw.c_cc[VMIN] = 0;
+    raw.c_cc[VTIME] = 0;
+    if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) != 0) return;
+  }
+
+  if (fcntl(STDIN_FILENO, F_SETFL, xv6_stdin_flags | O_NONBLOCK) != 0) {
+    if (xv6_stdin_is_tty) tcsetattr(STDIN_FILENO, TCSAFLUSH, &xv6_stdin_termios);
+    return;
+  }
+  atexit(restore_xv6_uart_stdin);
+  xv6_stdin_ready = true;
+#endif
+}
+
+static void poll_xv6_uart_stdin() {
+#ifdef CONFIG_HAS_XV6_UART
+  if (!xv6_stdin_ready) return;
+  fd_set rfds;
+  struct timeval timeout = {};
+  FD_ZERO(&rfds);
+  FD_SET(STDIN_FILENO, &rfds);
+  int ret = select(STDIN_FILENO + 1, &rfds, NULL, NULL, &timeout);
+  if (ret <= 0 || !FD_ISSET(STDIN_FILENO, &rfds)) return;
+
+  uint8_t buf[128];
+  ssize_t nread = read(STDIN_FILENO, buf, sizeof(buf));
+  if (nread <= 0) return;
+  for (ssize_t i = 0; i < nread; i++) {
+    xv6_uart_input_char(buf[i]);
+  }
+#endif
+}
+#endif
 
 void device_update() {
   static uint64_t last = 0;
@@ -48,6 +117,7 @@ void device_update() {
 
   IFDEF(CONFIG_HAS_VGA, vga_update_screen());
   IFDEF(CONFIG_HAS_XV6_CLINT, xv6_clint_update());
+  IFNDEF(CONFIG_TARGET_AM, poll_xv6_uart_stdin());
 
 #ifndef CONFIG_TARGET_AM
   SDL_Event event;
@@ -82,6 +152,10 @@ void sdl_clear_event_queue() {
 void init_device() {
   IFDEF(CONFIG_TARGET_AM, ioe_init());
   init_map();
+
+#ifndef CONFIG_TARGET_AM
+  IFDEF(CONFIG_HAS_XV6_UART, init_xv6_uart_stdin());
+#endif
 
   IFDEF(CONFIG_HAS_SERIAL, init_serial());
   IFDEF(CONFIG_HAS_XV6_UART, init_xv6_uart());
