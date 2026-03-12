@@ -22,6 +22,10 @@
 
 void init_map();
 void init_serial();
+void init_xv6_uart();
+void init_xv6_clint();
+void init_xv6_plic();
+void init_xv6_virtio_blk();
 void init_timer();
 void init_vga();
 void init_i8042();
@@ -32,6 +36,7 @@ void init_alarm();
 
 void send_key(uint8_t, bool);
 void vga_update_screen();
+void xv6_clint_update();
 
 void device_update() {
   static uint64_t last = 0;
@@ -42,6 +47,7 @@ void device_update() {
   last = now;
 
   IFDEF(CONFIG_HAS_VGA, vga_update_screen());
+  IFDEF(CONFIG_HAS_XV6_CLINT, xv6_clint_update());
 
 #ifndef CONFIG_TARGET_AM
   SDL_Event event;
@@ -78,6 +84,10 @@ void init_device() {
   init_map();
 
   IFDEF(CONFIG_HAS_SERIAL, init_serial());
+  IFDEF(CONFIG_HAS_XV6_UART, init_xv6_uart());
+  IFDEF(CONFIG_HAS_XV6_CLINT, init_xv6_clint());
+  IFDEF(CONFIG_HAS_XV6_PLIC, init_xv6_plic());
+  IFDEF(CONFIG_HAS_XV6_VIRTIO_BLK, init_xv6_virtio_blk());
   IFDEF(CONFIG_HAS_TIMER, init_timer());
   IFDEF(CONFIG_HAS_VGA, init_vga());
   IFDEF(CONFIG_HAS_KEYBOARD, init_i8042());

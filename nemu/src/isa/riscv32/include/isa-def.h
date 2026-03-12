@@ -56,12 +56,23 @@
 
 enum {
   RISCV_PRIV_U = 0,
+  RISCV_PRIV_S = 1,
   RISCV_PRIV_M = 3,
 };
+
+#define SSTATUS_UIE      (1u << 0)
+#define SSTATUS_SIE      (1u << 1)
+#define SSTATUS_UPIE     (1u << 4)
+#define SSTATUS_SPIE     (1u << 5)
+#define SSTATUS_SPP      (1u << 8)
+#define SSTATUS_SUM      (1u << 18)
+#define SSTATUS_MXR      (1u << 19)
+#define SSTATUS_MASK     (SSTATUS_UIE | SSTATUS_SIE | SSTATUS_UPIE | SSTATUS_SPIE | SSTATUS_SPP | SSTATUS_SUM | SSTATUS_MXR)
 
 #define MSTATUS_MPP_SHIFT 11
 #define MSTATUS_MPP_MASK  (3u << MSTATUS_MPP_SHIFT)
 #define MSTATUS_MPP_U     (RISCV_PRIV_U << MSTATUS_MPP_SHIFT)
+#define MSTATUS_MPP_S     (RISCV_PRIV_S << MSTATUS_MPP_SHIFT)
 #define MSTATUS_MPP_M     (RISCV_PRIV_M << MSTATUS_MPP_SHIFT)
 #define MSTATUS_MIE       (1u << 3)
 #define MSTATUS_MPIE      (1u << 7)
@@ -71,7 +82,10 @@ enum {
 typedef struct {
   word_t gpr[MUXDEF(CONFIG_RVE, 16, 32)];
   vaddr_t pc;
-  word_t mstatus, mtvec, mepc, mcause, satp, mscratch;
+  word_t mstatus, mtvec, mepc, mcause, mtval, mscratch;
+  word_t medeleg, mideleg, mie, mip, mcounteren;
+  word_t stvec, sepc, scause, stval, sscratch;
+  word_t satp;
   uint8_t priv;
   bool INTR;
 } MUXDEF(CONFIG_RV64, riscv64_CPU_state, riscv32_CPU_state);

@@ -16,6 +16,10 @@
 DIRS-y += src/device/io
 SRCS-$(CONFIG_DEVICE) += src/device/device.c src/device/alarm.c src/device/intr.c
 SRCS-$(CONFIG_HAS_SERIAL) += src/device/serial.c
+SRCS-$(CONFIG_HAS_XV6_UART) += src/device/xv6_uart.c
+SRCS-$(CONFIG_HAS_XV6_CLINT) += src/device/xv6_clint.c
+SRCS-$(CONFIG_HAS_XV6_PLIC) += src/device/xv6_plic.c
+SRCS-$(CONFIG_HAS_XV6_VIRTIO_BLK) += src/device/xv6_virtio_blk.c
 SRCS-$(CONFIG_HAS_TIMER) += src/device/timer.c
 SRCS-$(CONFIG_HAS_KEYBOARD) += src/device/keyboard.c
 SRCS-$(CONFIG_HAS_VGA) += src/device/vga.c

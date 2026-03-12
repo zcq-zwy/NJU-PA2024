@@ -47,10 +47,9 @@ paddr_t isa_mmu_translate(vaddr_t vaddr, int len, int type) {
   if (pde & (PTE_R | PTE_W | PTE_X)) return MEM_RET_FAIL;
 
   paddr_t pt = pte_addr(pde);
-  word_t pte = paddr_read(pt + vpn0 * sizeof(word_t), sizeof(word_t));
+  paddr_t pte_addr_pa = pt + vpn0 * sizeof(word_t);
+  word_t pte = paddr_read(pte_addr_pa, sizeof(word_t));
   if (!(pte & PTE_V)) return MEM_RET_FAIL;
-  if (!(pte & PTE_A)) return MEM_RET_FAIL;
-  if (type == MEM_TYPE_WRITE && !(pte & PTE_D)) return MEM_RET_FAIL;
   if (cpu.priv == RISCV_PRIV_U && !(pte & PTE_U)) return MEM_RET_FAIL;
 
   switch (type) {
@@ -69,7 +68,13 @@ paddr_t isa_mmu_translate(vaddr_t vaddr, int len, int type) {
       break;
   }
 
+  word_t new_pte = pte | PTE_A;
+  if (type == MEM_TYPE_WRITE) new_pte |= PTE_D;
+  if (new_pte != pte) {
+    paddr_write(pte_addr_pa, sizeof(word_t), new_pte);
+    pte = new_pte;
+  }
+
   paddr_t pa = pte_addr(pte) | off;
-  if (vaddr >= 0x80000000) assert(pa == vaddr);
   return pa;
 }

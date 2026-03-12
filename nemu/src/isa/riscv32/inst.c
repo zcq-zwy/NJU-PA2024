@@ -53,14 +53,95 @@ static void decode_operand(Decode *s, int *rd, word_t *src1, word_t *src2, word_
   }
 }
 
-static word_t *csr(uint32_t addr) {
+extern uint64_t g_nr_guest_inst;
+
+static inline word_t mstatus_get_sie(word_t mstatus) {
+  return (mstatus & SSTATUS_SIE) ? 1 : 0;
+}
+
+static inline word_t mstatus_set_sie(word_t mstatus, word_t enable) {
+  return enable ? (mstatus | SSTATUS_SIE) : (mstatus & ~SSTATUS_SIE);
+}
+
+static inline word_t mstatus_get_spie(word_t mstatus) {
+  return (mstatus & SSTATUS_SPIE) ? 1 : 0;
+}
+
+static inline word_t mstatus_set_spie(word_t mstatus, word_t enable) {
+  return enable ? (mstatus | SSTATUS_SPIE) : (mstatus & ~SSTATUS_SPIE);
+}
+
+static inline word_t mstatus_get_spp(word_t mstatus) {
+  return (mstatus & SSTATUS_SPP) ? RISCV_PRIV_S : RISCV_PRIV_U;
+}
+
+static inline word_t mstatus_set_spp(word_t mstatus, word_t priv) {
+  return (priv == RISCV_PRIV_S) ? (mstatus | SSTATUS_SPP) : (mstatus & ~SSTATUS_SPP);
+}
+
+static word_t csr_read(uint32_t addr) {
   switch (addr) {
-    case 0x300: return &cpu.mstatus;
-    case 0x305: return &cpu.mtvec;
-    case 0x340: return &cpu.mscratch;
-    case 0x341: return &cpu.mepc;
-    case 0x342: return &cpu.mcause;
-    case 0x180: return &cpu.satp;
+    case 0x300: return cpu.mstatus;
+    case 0x302: return cpu.medeleg;
+    case 0x303: return cpu.mideleg;
+    case 0x304: return cpu.mie;
+    case 0x305: return cpu.mtvec;
+    case 0x306: return cpu.mcounteren;
+    case 0x340: return cpu.mscratch;
+    case 0x341: return cpu.mepc;
+    case 0x342: return cpu.mcause;
+    case 0x343: return cpu.mtval;
+    case 0x344: return cpu.mip;
+
+    case 0x100: return cpu.mstatus & SSTATUS_MASK;
+    case 0x104: return cpu.mie & cpu.mideleg;
+    case 0x105: return cpu.stvec;
+    case 0x140: return cpu.sscratch;
+    case 0x141: return cpu.sepc;
+    case 0x142: return cpu.scause;
+    case 0x143: return cpu.stval;
+    case 0x144: return cpu.mip & cpu.mideleg;
+
+    case 0x180: return cpu.satp;
+    case 0xc01: return (word_t)g_nr_guest_inst;
+    case 0xf14: return 0;
+    default: panic("unsupported CSR = 0x%x", addr);
+  }
+}
+
+static void csr_write(uint32_t addr, word_t val) {
+  switch (addr) {
+    case 0x300: cpu.mstatus = val; return;
+    case 0x302: cpu.medeleg = val; return;
+    case 0x303: cpu.mideleg = val; return;
+    case 0x304: cpu.mie = val; return;
+    case 0x305: cpu.mtvec = val; return;
+    case 0x306: cpu.mcounteren = val; return;
+    case 0x340: cpu.mscratch = val; return;
+    case 0x341: cpu.mepc = val; return;
+    case 0x342: cpu.mcause = val; return;
+    case 0x343: cpu.mtval = val; return;
+    case 0x344: cpu.mip = val; return;
+
+    case 0x100:
+      cpu.mstatus = (cpu.mstatus & ~SSTATUS_MASK) | (val & SSTATUS_MASK);
+      return;
+    case 0x104:
+      cpu.mie = (cpu.mie & ~cpu.mideleg) | (val & cpu.mideleg);
+      return;
+    case 0x105: cpu.stvec = val; return;
+    case 0x140: cpu.sscratch = val; return;
+    case 0x141: cpu.sepc = val; return;
+    case 0x142: cpu.scause = val; return;
+    case 0x143: cpu.stval = val; return;
+    case 0x144:
+      cpu.mip = (cpu.mip & ~cpu.mideleg) | (val & cpu.mideleg);
+      return;
+
+    case 0x180: cpu.satp = val; return;
+    case 0xc01:
+    case 0xf14:
+      return;
     default: panic("unsupported CSR = 0x%x", addr);
   }
 }
@@ -148,8 +229,26 @@ static int decode_exec(Decode *s) {
       cpu.mstatus |= MSTATUS_MPIE;
       cpu.mstatus = mstatus_set_mpp(cpu.mstatus, RISCV_PRIV_U);
       s->dnpc = cpu.mepc);
-  INSTPAT("??????? ????? ????? 001 ????? 11100 11", csrrw , I, word_t *p = csr(BITS(s->isa.inst, 31, 20)); word_t t = *p; *p = src1; R(rd) = t);
-  INSTPAT("??????? ????? ????? 010 ????? 11100 11", csrrs , I, word_t *p = csr(BITS(s->isa.inst, 31, 20)); word_t t = *p; if (BITS(s->isa.inst, 19, 15) != 0) *p = t | src1; R(rd) = t);
+  INSTPAT("0001000 00010 00000 000 00000 11100 11", sret  , N,
+      cpu.priv = mstatus_get_spp(cpu.mstatus);
+      cpu.mstatus = mstatus_set_sie(cpu.mstatus, mstatus_get_spie(cpu.mstatus));
+      cpu.mstatus = mstatus_set_spie(cpu.mstatus, 1);
+      cpu.mstatus = mstatus_set_spp(cpu.mstatus, RISCV_PRIV_U);
+      s->dnpc = cpu.sepc);
+  INSTPAT("00001?? ????? ????? 010 ????? 01011 11", amoswap_w, R,
+      word_t t = Mr(src1, 4);
+      Mw(src1, 4, src2);
+      R(rd) = t);
+  INSTPAT("??????? ????? ????? 001 ????? 11100 11", csrrw , I,
+      uint32_t csr_addr = BITS(s->isa.inst, 31, 20);
+      word_t t = csr_read(csr_addr);
+      csr_write(csr_addr, src1);
+      R(rd) = t);
+  INSTPAT("??????? ????? ????? 010 ????? 11100 11", csrrs , I,
+      uint32_t csr_addr = BITS(s->isa.inst, 31, 20);
+      word_t t = csr_read(csr_addr);
+      if (BITS(s->isa.inst, 19, 15) != 0) csr_write(csr_addr, t | src1);
+      R(rd) = t);
   // fence: for single-core in-order NEMU, treat as no-op
   INSTPAT("??????? ????? 00000 000 00000 00011 11", fence  , I, );
   // fence.i: also no-op in this simplified model
@@ -164,7 +263,30 @@ static int decode_exec(Decode *s) {
   return 0;
 }
 
+static int decode_exec_compressed(Decode *s) {
+  s->dnpc = s->snpc;
+  uint32_t i = s->isa.inst & 0xffff;
+  int rd = BITS(i, 11, 7);
+  word_t imm = SEXT((BITS(i, 12, 12) << 5) | BITS(i, 6, 2), 6);
+
+  if ((i & 0x3) == 0x1 && BITS(i, 15, 13) == 0x2) {
+    R(rd) = imm;
+  } else {
+    INV(s->pc);
+  }
+
+  R(0) = 0;
+  return 0;
+}
+
 int isa_exec_once(Decode *s) {
+  uint16_t inst16 = inst_fetch(&s->snpc, 2);
+  if ((inst16 & 0x3) != 0x3) {
+    s->isa.inst = inst16;
+    return decode_exec_compressed(s);
+  }
+
+  s->snpc = s->pc;
   s->isa.inst = inst_fetch(&s->snpc, 4);
   return decode_exec(s);
 }

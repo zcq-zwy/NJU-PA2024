@@ -31,6 +31,58 @@ config SERIAL_INPUT_FIFO
   default n
 endif # HAS_SERIAL
 
+menuconfig HAS_XV6_UART
+  depends on !TARGET_AM
+  bool "Enable xv6 UART"
+  default n
+
+if HAS_XV6_UART
+config XV6_UART_MMIO
+  hex "MMIO address of the xv6 UART controller"
+  default 0x10000000
+
+config XV6_UART_IRQ
+  int "IRQ number of the xv6 UART controller"
+  default 10
+endif # HAS_XV6_UART
+
+menuconfig HAS_XV6_CLINT
+  depends on !TARGET_AM
+  bool "Enable xv6 CLINT"
+  default n
+
+if HAS_XV6_CLINT
+config XV6_CLINT_MMIO
+  hex "MMIO address of the xv6 CLINT"
+  default 0x02000000
+endif # HAS_XV6_CLINT
+
+menuconfig HAS_XV6_PLIC
+  depends on !TARGET_AM
+  bool "Enable xv6 PLIC"
+  default n
+
+if HAS_XV6_PLIC
+config XV6_PLIC_MMIO
+  hex "MMIO address of the xv6 PLIC"
+  default 0x0c000000
+endif # HAS_XV6_PLIC
+
+menuconfig HAS_XV6_VIRTIO_BLK
+  depends on !TARGET_AM
+  bool "Enable xv6 virtio-mmio block"
+  default n
+
+if HAS_XV6_VIRTIO_BLK
+config XV6_VIRTIO_BLK_MMIO
+  hex "MMIO address of the xv6 virtio block device"
+  default 0x10001000
+
+config XV6_VIRTIO_BLK_IRQ
+  int "IRQ number of the xv6 virtio block device"
+  default 1
+endif # HAS_XV6_VIRTIO_BLK
+
 menuconfig HAS_TIMER
   bool "Enable timer"
   default y
