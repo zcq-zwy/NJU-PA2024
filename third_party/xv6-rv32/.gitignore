@@ -22,3 +22,6 @@ user/initcode
 user/initcode.out
 user/usys.S
 user/_*
+__pycache__/
+*.pyc
+xv6.out

@@ -1,0 +1,32 @@
+#!/usr/bin/env python3
+
+from gradelib import *
+
+r = Runner(save("xv6.out"))
+
+
+@test(40, "trace")
+def test_trace():
+    r.run_qemu(shell_script([
+        "trace 32 grep hello README",
+    ]), timeout=40)
+    r.match("^\\d+: syscall read -> .*")
+
+
+@test(40, "sysinfo")
+def test_sysinfo():
+    r.run_qemu(shell_script([
+        "sysinfotest",
+    ]), timeout=40)
+    r.match("^sysinfotest: OK$")
+
+
+@test(20, "trace all")
+def test_trace_all():
+    r.run_qemu(shell_script([
+        "trace 2147483647 grep hello README",
+    ]), timeout=40)
+    r.match("^\\d+: syscall trace -> 0$", "^\\d+: syscall exec -> .*", "^\\d+: syscall read -> .*")
+
+
+run_tests()

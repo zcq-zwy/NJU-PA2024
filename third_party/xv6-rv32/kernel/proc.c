@@ -104,6 +104,7 @@ allocproc(void)
 
 found:
   p->pid = allocpid();
+  p->tracemask = 0;
 
   // Allocate a trapframe page.
   if((p->tf = (struct trapframe *)kalloc()) == 0){
@@ -273,6 +274,7 @@ fork(void)
     if(p->ofile[i])
       np->ofile[i] = filedup(p->ofile[i]);
   np->cwd = idup(p->cwd);
+  np->tracemask = p->tracemask;
 
   safestrcpy(np->name, p->name, sizeof(p->name));
 
@@ -283,6 +285,22 @@ fork(void)
   release(&np->lock);
 
   return pid;
+}
+
+uint32
+proc_count(void)
+{
+  struct proc *p;
+  uint32 count = 0;
+
+  for(p = proc; p < &proc[NPROC]; p++){
+    acquire(&p->lock);
+    if(p->state != UNUSED)
+      count++;
+    release(&p->lock);
+  }
+
+  return count;
 }
 
 // Pass p's abandoned children to init.
