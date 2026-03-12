@@ -61,6 +61,7 @@ sys_sleep(void)
 
   if(argint(0, &n) < 0)
     return -1;
+  backtrace();
   acquire(&tickslock);
   ticks0 = ticks;
   while(ticks - ticks0 < n){
@@ -123,4 +124,45 @@ sys_sysinfo(void)
   if(copyout(myproc()->pagetable, addr, (char *)&info, sizeof(info)) < 0)
     return -1;
   return 0;
+}
+
+uint32
+sys_sigalarm(void)
+{
+  int interval;
+  uint32 handler;
+  struct proc *p = myproc();
+
+  if(argint(0, &interval) < 0)
+    return -1;
+  if(argaddr(1, &handler) < 0)
+    return -1;
+
+  p->alarm_interval = interval;
+  p->alarm_elapsed = 0;
+  p->alarm_handler = handler;
+  p->alarm_active = 0;
+  acquire(&tickslock);
+  p->alarm_last_tick = ticks;
+  release(&tickslock);
+  memset(&p->alarm_tf, 0, sizeof(p->alarm_tf));
+  return 0;
+}
+
+uint32
+sys_sigreturn(void)
+{
+  struct proc *p = myproc();
+  uint32 a0;
+
+  if(!p->alarm_active)
+    return -1;
+
+  a0 = p->alarm_tf.a0;
+  *(p->tf) = p->alarm_tf;
+  p->alarm_active = 0;
+  acquire(&tickslock);
+  p->alarm_last_tick = ticks;
+  release(&tickslock);
+  return a0;
 }

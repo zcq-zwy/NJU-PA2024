@@ -104,4 +104,10 @@ struct proc {
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
   int tracemask;               // trace() 指定的系统调用掩码
+  int alarm_interval;          // sigalarm() 指定的触发间隔
+  int alarm_elapsed;           // 当前已经累计的时钟中断数
+  uint alarm_last_tick;        // 最近一次设置/触发 alarm 时看到的 ticks
+  int alarm_active;            // 是否正在执行用户态 alarm 处理函数
+  uint32 alarm_handler;        // 用户态 alarm 处理函数入口
+  struct trapframe alarm_tf;   // 进入 alarm 前保存的寄存器现场
 };

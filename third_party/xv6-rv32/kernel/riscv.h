@@ -128,6 +128,14 @@ r_sepc()
   return x;
 }
 
+static inline uint32
+r_fp()
+{
+  uint32 x;
+  asm volatile("mv %0, s0" : "=r" (x));
+  return x;
+}
+
 // Machine Exception Delegation
 static inline uint32
 r_medeleg()

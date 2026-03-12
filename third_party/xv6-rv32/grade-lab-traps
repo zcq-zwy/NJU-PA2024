@@ -1,0 +1,63 @@
+#!/usr/bin/env python3
+
+import re
+from gradelib import *
+
+r = Runner(save("xv6.out"))
+
+
+def run_with_retry(action, attempts=3):
+    last_error = None
+
+    for _ in range(attempts):
+        try:
+            action()
+            return
+        except AssertionError as err:
+            last_error = err
+
+    raise last_error
+
+
+@test(15, "answers")
+def test_answers():
+    with open("answers-traps.txt") as f:
+        data = f.read()
+    assert_lines_match(
+        data,
+        r"^A1\..*a0.*a7.*a2.*$",
+        r"^A2\..*0x58.*0x70.*$",
+        r"^A3\..*0x884.*$",
+    )
+
+
+@test(25, "backtrace")
+def test_backtrace():
+    def action():
+      r.run_qemu(shell_script([
+          "bttest",
+          "echo BT_DONE",
+      ], "BT_DONE"), timeout=60)
+      r.match(r"^backtrace:$", r"^0x[0-9a-f]+$", r"^bttest: OK$", r"^BT_DONE$")
+
+    run_with_retry(action)
+
+
+@test(59, "alarm")
+def test_alarm():
+    def action():
+        r.run_qemu(shell_script([
+            "alarmtest",
+            "echo ALARM_DONE",
+        ], "ALARM_DONE"), timeout=120)
+        r.match(r"^test0 passed$", r"^test1 passed$", r"^alarmtest: OK$", r"^ALARM_DONE$")
+
+    run_with_retry(action)
+
+
+@test(1, "time")
+def test_time():
+    check_time()
+
+
+run_tests()

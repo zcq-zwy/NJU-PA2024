@@ -25,6 +25,28 @@ static struct {
 
 static char digits[] = "0123456789abcdef";
 
+void
+backtrace(void)
+{
+  uint32 fp = r_fp();
+  uint32 stack_bottom = PGROUNDDOWN(fp);
+  uint32 stack_top = stack_bottom + PGSIZE;
+
+  printf("backtrace:\n");
+  while(fp >= stack_bottom + 8 && fp < stack_top){
+    uint32 ra = *(uint32 *)(fp - 4);
+    uint32 prev_fp = *(uint32 *)(fp - 8);
+
+    if(ra == 0)
+      break;
+    printf("%p\n", ra);
+
+    if(prev_fp <= fp || prev_fp < stack_bottom || prev_fp >= stack_top)
+      break;
+    fp = prev_fp;
+  }
+}
+
 static void
 printint(int xx, int base, int sign)
 {
@@ -121,6 +143,7 @@ panic(char *s)
   printf("panic: ");
   printf(s);
   printf("\n");
+  backtrace();
   panicked = 1; // freeze other CPUs
   for(;;)
     ;

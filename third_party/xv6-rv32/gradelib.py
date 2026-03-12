@@ -218,11 +218,11 @@ def shell_script(lines, wait_for=None):
         state = {
             "commands": list(lines),
             "next_index": 0,
-            "last_prompt_count": 0,
         }
 
         def on_output():
             prompt_count = runner.qemu.output.count("$ ")
+            at_prompt = runner.qemu.output.endswith("$ ")
 
             if wait_for:
                 lines = runner.qemu.output.splitlines()
@@ -230,18 +230,14 @@ def shell_script(lines, wait_for=None):
                     runner.request_stop(0.2)
                     return
 
-            # 如果一次读取中出现了多个新的 shell 提示符，
-            # 需要把对应数量的命令依次补发出去，否则会漏掉后续命令。
-            while prompt_count > state["last_prompt_count"] and state["next_index"] < len(state["commands"]):
-                state["last_prompt_count"] += 1
+            # 只要 shell 当前停在提示符，就发送下一条命令。
+            while at_prompt and state["next_index"] < len(state["commands"]) and prompt_count >= state["next_index"] + 1:
                 runner.qemu.write(state["commands"][state["next_index"]] + "\n")
                 state["next_index"] += 1
-
-            if prompt_count > state["last_prompt_count"]:
-                state["last_prompt_count"] = prompt_count
+                return
 
             # 全部命令发完，并且 shell 已经重新回到提示符，就可以结束了。
-            if wait_for is None and state["next_index"] >= len(state["commands"]) and prompt_count >= len(state["commands"]) + 1:
+            if wait_for is None and at_prompt and state["next_index"] >= len(state["commands"]) and prompt_count >= len(state["commands"]) + 1:
                 runner.request_stop(0.2)
 
         runner.output_hooks.append(on_output)

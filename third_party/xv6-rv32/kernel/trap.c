@@ -37,6 +37,7 @@ void
 usertrap(void)
 {
   int which_dev = 0;
+  uint now_ticks;
 
   if((r_sstatus() & SSTATUS_SPP) != 0)
     panic("usertrap: not from user mode");
@@ -75,6 +76,18 @@ usertrap(void)
 
   if(p->killed)
     exit(-1);
+
+  if(p->alarm_interval > 0 && !p->alarm_active){
+    acquire(&tickslock);
+    now_ticks = ticks;
+    release(&tickslock);
+    if(now_ticks - p->alarm_last_tick >= (uint)p->alarm_interval){
+      p->alarm_last_tick = now_ticks;
+      p->alarm_active = 1;
+      p->alarm_tf = *(p->tf);
+      p->tf->epc = p->alarm_handler;
+    }
+  }
 
   // give up the CPU if this is a timer interrupt.
   if(which_dev == 2)

@@ -105,6 +105,12 @@ allocproc(void)
 found:
   p->pid = allocpid();
   p->tracemask = 0;
+  p->alarm_interval = 0;
+  p->alarm_elapsed = 0;
+  p->alarm_last_tick = 0;
+  p->alarm_active = 0;
+  p->alarm_handler = 0;
+  memset(&p->alarm_tf, 0, sizeof(p->alarm_tf));
 
   // Allocate a trapframe page.
   if((p->tf = (struct trapframe *)kalloc()) == 0){
@@ -143,6 +149,13 @@ freeproc(struct proc *p)
   p->chan = 0;
   p->killed = 0;
   p->xstate = 0;
+  p->tracemask = 0;
+  p->alarm_interval = 0;
+  p->alarm_elapsed = 0;
+  p->alarm_last_tick = 0;
+  p->alarm_active = 0;
+  p->alarm_handler = 0;
+  memset(&p->alarm_tf, 0, sizeof(p->alarm_tf));
   p->state = UNUSED;
 }
 
@@ -275,6 +288,12 @@ fork(void)
       np->ofile[i] = filedup(p->ofile[i]);
   np->cwd = idup(p->cwd);
   np->tracemask = p->tracemask;
+  np->alarm_interval = p->alarm_interval;
+  np->alarm_elapsed = 0;
+  np->alarm_last_tick = 0;
+  np->alarm_active = 0;
+  np->alarm_handler = p->alarm_handler;
+  memset(&np->alarm_tf, 0, sizeof(np->alarm_tf));
 
   safestrcpy(np->name, p->name, sizeof(p->name));
 

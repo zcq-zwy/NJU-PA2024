@@ -1,0 +1,8 @@
+Q1. 函数参数放在哪些寄存器里？`printf("%d %d\n", f(8) + 1, 13)` 里的 `13` 放在哪个寄存器？
+A1. RISC-V 按顺序使用 `a0` 到 `a7` 传递前 8 个参数。这个 `printf` 调用里，格式串在 `a0`，`f(8)+1` 在 `a1`，`13` 在 `a2`。
+
+Q2. `main` 中调用 `f` 和 `printf` 的位置分别在哪里？
+A2. 在 `user/call.asm` 里，`main` 对 `f` 的调用起始于 `0x58`，对 `printf` 的调用起始于 `0x70`。
+
+Q3. `printf` 的入口地址是多少？
+A3. 在 `user/call.asm` / `user/call.sym` 中，`printf` 的地址是 `0x884`。
