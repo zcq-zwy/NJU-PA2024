@@ -230,13 +230,15 @@ def shell_script(lines, wait_for=None):
                     runner.request_stop(0.2)
                     return
 
-            # 每次看到新的 shell 提示符，只发送一条命令。
+            # 如果一次读取中出现了多个新的 shell 提示符，
+            # 需要把对应数量的命令依次补发出去，否则会漏掉后续命令。
+            while prompt_count > state["last_prompt_count"] and state["next_index"] < len(state["commands"]):
+                state["last_prompt_count"] += 1
+                runner.qemu.write(state["commands"][state["next_index"]] + "\n")
+                state["next_index"] += 1
+
             if prompt_count > state["last_prompt_count"]:
                 state["last_prompt_count"] = prompt_count
-                if state["next_index"] < len(state["commands"]):
-                    runner.qemu.write(state["commands"][state["next_index"]] + "\n")
-                    state["next_index"] += 1
-                    return
 
             # 全部命令发完，并且 shell 已经重新回到提示符，就可以结束了。
             if wait_for is None and state["next_index"] >= len(state["commands"]) and prompt_count >= len(state["commands"]) + 1:

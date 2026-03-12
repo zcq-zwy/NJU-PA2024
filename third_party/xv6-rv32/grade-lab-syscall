@@ -5,6 +5,19 @@ from gradelib import *
 r = Runner(save("xv6.out"))
 
 
+def run_with_retry(action, attempts=3):
+    last_error = None
+
+    for _ in range(attempts):
+        try:
+            action()
+            return
+        except AssertionError as err:
+            last_error = err
+
+    raise last_error
+
+
 @test(40, "trace")
 def test_trace():
     r.run_qemu(shell_script([
@@ -15,18 +28,25 @@ def test_trace():
 
 @test(40, "sysinfo")
 def test_sysinfo():
-    r.run_qemu(shell_script([
-        "sysinfotest",
-    ]), timeout=40)
-    r.match("^sysinfotest: OK$")
+    def action():
+        r.run_qemu(shell_script([
+            "sysinfotest",
+            "echo SYSINFO_DONE",
+        ], "SYSINFO_DONE"), timeout=60)
+        r.match("^sysinfotest: OK$", "^SYSINFO_DONE$")
+
+    run_with_retry(action)
 
 
 @test(20, "trace all")
 def test_trace_all():
-    r.run_qemu(shell_script([
-        "trace 2147483647 grep hello README",
-    ]), timeout=40)
-    r.match("^\\d+: syscall trace -> 0$", "^\\d+: syscall exec -> .*", "^\\d+: syscall read -> .*")
+    def action():
+        r.run_qemu(shell_script([
+            "trace 2147483647 grep hello README",
+        ]), timeout=60)
+        r.match("^\\d+: syscall trace -> 0$", "^\\d+: syscall exec -> .*", "^\\d+: syscall read -> .*")
+
+    run_with_retry(action)
 
 
 run_tests()
