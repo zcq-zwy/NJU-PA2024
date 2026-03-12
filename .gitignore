@@ -17,5 +17,6 @@
 !init.sh
 !run_xv6_nemu.sh
 !run_xv6_smoke_test.sh
+!XV6-Lab-Base说明.md
 /riscv-arch-test-am/
 /riscv-tests/
