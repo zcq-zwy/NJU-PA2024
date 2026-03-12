@@ -79,6 +79,16 @@ enum {
 #define MSTATUS_SUM       (1u << 18)
 #define MSTATUS_MXR       (1u << 19)
 
+#define IRQ_S_SOFT_BIT    1u
+#define IRQ_M_SOFT_BIT    3u
+#define IRQ_S_TIMER_BIT   5u
+#define IRQ_M_TIMER_BIT   7u
+#define IRQ_S_EXT_BIT     9u
+#define IRQ_M_EXT_BIT     11u
+
+// RISC-V 允许委托给 S 态的中断只有 SSIP/STIP/SEIP。
+#define MIDELEG_MASK      ((1u << IRQ_S_SOFT_BIT) | (1u << IRQ_S_TIMER_BIT) | (1u << IRQ_S_EXT_BIT))
+
 typedef struct {
   word_t gpr[MUXDEF(CONFIG_RVE, 16, 32)];
   vaddr_t pc;

@@ -32,6 +32,18 @@ static inline bool is_interrupt(word_t cause) {
   return (cause >> 31) != 0;
 }
 
+static inline bool machine_intr_enabled(void) {
+  // 对比特权规范：当前特权级低于 M 时，M 态中断全局可达；
+  // 只有当前就在 M 态时，才受 mstatus.MIE 控制。
+  return cpu.priv != RISCV_PRIV_M || (cpu.mstatus & MSTATUS_MIE);
+}
+
+static inline bool supervisor_intr_enabled(void) {
+  // 当前特权级低于 S（即 U 态）时，S 态中断全局可达；
+  // 只有当前就在 S 态时，才受 sstatus.SIE 控制。
+  return cpu.priv < RISCV_PRIV_S || (cpu.mstatus & SSTATUS_SIE);
+}
+
 static word_t trap_tval = 0;
 
 void isa_set_trap_tval(word_t tval) {
@@ -70,17 +82,17 @@ word_t isa_raise_intr(word_t NO, vaddr_t epc) {
 }
 
 word_t isa_query_intr() {
-  if ((cpu.mip & cpu.mie & (1u << 7)) && (cpu.mstatus & MSTATUS_MIE)) {
+  if ((cpu.mip & cpu.mie & (1u << IRQ_M_TIMER_BIT)) && machine_intr_enabled()) {
     return IRQ_TIMER;
   }
-  if (cpu.INTR && (cpu.mstatus & MSTATUS_MIE)) {
+  if (cpu.INTR && machine_intr_enabled()) {
     cpu.INTR = false;
     return IRQ_TIMER;
   }
-  if ((cpu.mip & cpu.mie & (1u << 1)) && (cpu.mstatus & SSTATUS_SIE)) {
+  if ((cpu.mip & cpu.mie & (1u << IRQ_S_SOFT_BIT)) && supervisor_intr_enabled()) {
     return IRQ_S_SOFT;
   }
-  if ((cpu.mip & cpu.mie & (1u << 9)) && (cpu.mstatus & SSTATUS_SIE)) {
+  if ((cpu.mip & cpu.mie & (1u << IRQ_S_EXT_BIT)) && supervisor_intr_enabled()) {
     return IRQ_S_EXT;
   }
   return INTR_EMPTY;

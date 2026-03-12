@@ -18,5 +18,10 @@ make -C "$NEMU_HOME" ARCH=native riscv32-xv6_defconfig
 env CCACHE_DISABLE="${CCACHE_DISABLE:-1}" make -C "$NEMU_HOME" ISA=riscv32 -j2
 
 cd "$NEMU_HOME"
-env XV6_HOME="$XV6_HOME" SDL_VIDEODRIVER=dummy \
-  ./build/riscv32-nemu-interpreter -b "$XV6_HOME/kernel/kernel.bin"
+if [ -r /dev/tty ]; then
+  env XV6_HOME="$XV6_HOME" SDL_VIDEODRIVER=dummy \
+    ./build/riscv32-nemu-interpreter -b "$XV6_HOME/kernel/kernel.bin" < /dev/tty
+else
+  env XV6_HOME="$XV6_HOME" SDL_VIDEODRIVER=dummy \
+    ./build/riscv32-nemu-interpreter -b "$XV6_HOME/kernel/kernel.bin"
+fi

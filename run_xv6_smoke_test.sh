@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 XV6_HOME="${XV6_HOME:-$ROOT_DIR/third_party/xv6-rv32}"
 NEMU_HOME="${NEMU_HOME:-$ROOT_DIR/nemu}"
-TIMEOUT_SECS="${TIMEOUT_SECS:-20}"
+TIMEOUT_SECS="${TIMEOUT_SECS:-35}"
 SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-dummy}"
 CCACHE_DISABLE="${CCACHE_DISABLE:-1}"
 KEEP_TMP="${KEEP_TMP:-0}"
@@ -53,26 +53,18 @@ fi
 
 echo "[smoke] run xv6 smoke commands"
 {
-  sleep 7
-  printf 'echo __XV6_SMOKE_OK__\n'
+  # xv6 在 NEMU 上启动较慢，首条命令必须等 shell 起来后再送入。
+  sleep 12
   sleep 1
-  printf 'ls\n'
+  printf 'pingpong\n'
+  sleep 2
+  printf 'primes\n'
+  sleep 2
+  printf 'find . README\n'
+  sleep 2
+  printf 'echo README | xargs cat\n'
   sleep 1
-  printf 'cat README\n'
-  sleep 1
-  printf 'wc README\n'
-  sleep 1
-  printf 'grep xv6 README\n'
-  sleep 1
-  printf 'mkdir smoke_dir\n'
-  sleep 1
-  printf 'ls\n'
-  sleep 1
-  printf 'rm smoke_dir\n'
-  sleep 1
-  printf 'ls\n'
-  sleep 1
-} >"$fifo" &
+} >"$fifo" 2>/dev/null &
 writer_pid=$!
 
 set +e
@@ -106,22 +98,12 @@ check_log() {
 }
 
 check_log "init: starting sh" "shell startup"
-check_log "__XV6_SMOKE_OK__" "echo command output"
-check_log "README" "README appears in directory listing"
+check_log "received ping" "pingpong child output"
+check_log "received pong" "pingpong parent output"
+check_log "prime 2" "primes output"
+check_log "prime 31" "primes tail output"
+check_log "./README" "find output"
 check_log "xv6 is a re-implementation of Dennis Ritchie's and Ken Thompson's Unix" "cat README output"
-check_log "1982 README" "wc README output"
-check_log "xv6" "grep README output"
-check_log "smoke_dir" "mkdir result visible in ls"
-
-if grep -Eq '^smoke_dir[[:space:]]' "$log"; then
-  last_smoke_line="$(grep -En '^smoke_dir[[:space:]]' "$log" | tail -n1 | cut -d: -f1)"
-  total_lines="$(wc -l < "$log")"
-  if tail -n "$(( total_lines - last_smoke_line ))" "$log" | grep -Eq '^smoke_dir[[:space:]]'; then
-    echo "[smoke] smoke_dir still visible after rm" >&2
-    cat "$log" >&2
-    exit 1
-  fi
-fi
 
 echo "[smoke] passed"
 if [[ "$KEEP_TMP" == "1" ]]; then

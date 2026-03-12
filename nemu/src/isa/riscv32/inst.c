@@ -113,7 +113,7 @@ static void csr_write(uint32_t addr, word_t val) {
   switch (addr) {
     case 0x300: cpu.mstatus = val; return;
     case 0x302: cpu.medeleg = val; return;
-    case 0x303: cpu.mideleg = val; return;
+    case 0x303: cpu.mideleg = val & MIDELEG_MASK; return;
     case 0x304: cpu.mie = val; return;
     case 0x305: cpu.mtvec = val; return;
     case 0x306: cpu.mcounteren = val; return;
