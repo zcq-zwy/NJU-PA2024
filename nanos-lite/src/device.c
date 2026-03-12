@@ -44,7 +44,7 @@ size_t events_read(void *buf, size_t offset, size_t len) {
     switch (ev.keycode) {
       case AM_KEY_F1: switch_fg_pcb(PCB_PAL); return 0;
       case AM_KEY_F2: switch_fg_pcb(PCB_BIRD); return 0;
-      case AM_KEY_F3: switch_fg_pcb(PCB_NSLIDER); return 0;
+      case AM_KEY_F3: switch_fg_pcb(PCB_ONSCRIPTER); return 0;
     }
   }
 

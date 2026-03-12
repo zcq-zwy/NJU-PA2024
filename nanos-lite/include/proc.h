@@ -9,7 +9,7 @@
 enum {
   PCB_PAL = 0,
   PCB_BIRD,
-  PCB_NSLIDER,
+  PCB_ONSCRIPTER,
   PCB_SYSMON,
 };
 

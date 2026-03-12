@@ -4,7 +4,7 @@
 #define NR_FRONT_PROC 3
 #define PAL_SLICES 5
 #define BIRD_SLICES 5
-#define NSLIDER_SLICES 5
+#define ONSCRIPTER_SLICES 5
 #define SYSMON_SLICES 1
 #define SYSMON_PERIOD 4
 
@@ -21,7 +21,7 @@ static uint64_t bg_runs = 0;
 static int proc_slices[MAX_NR_PROC] = {
   [PCB_PAL] = PAL_SLICES,
   [PCB_BIRD] = BIRD_SLICES,
-  [PCB_NSLIDER] = NSLIDER_SLICES,
+  [PCB_ONSCRIPTER] = ONSCRIPTER_SLICES,
   [PCB_SYSMON] = SYSMON_SLICES,
 };
 
@@ -50,13 +50,15 @@ void init_proc() {
 
   static char *pal_argv[] = { "/bin/pal", NULL };
   static char *bird_argv[] = { "/bin/bird", NULL };
-  static char *nslider_argv[] = { "/bin/nslider", NULL };
+  static char *onscripter_argv[] = {
+    "/bin/onscripter", "-r", "/share/games/planetarian", NULL
+  };
   static char *sysmon_argv[] = { "/bin/sysmon", NULL };
   int ret = context_uload(&pcb[PCB_PAL], "/bin/pal", pal_argv, NULL);
   assert(ret == 0);
   ret = context_uload(&pcb[PCB_BIRD], "/bin/bird", bird_argv, NULL);
   assert(ret == 0);
-  ret = context_uload(&pcb[PCB_NSLIDER], "/bin/nslider", nslider_argv, NULL);
+  ret = context_uload(&pcb[PCB_ONSCRIPTER], "/bin/onscripter", onscripter_argv, NULL);
   assert(ret == 0);
   ret = context_uload(&pcb[PCB_SYSMON], "/bin/sysmon", sysmon_argv, NULL);
   assert(ret == 0);
