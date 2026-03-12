@@ -31,12 +31,8 @@ size_t disk_read(void *buf, size_t offset, size_t len) {
     size_t chunk = len - done;
     if (chunk > disk_blksz - blkoff) chunk = disk_blksz - blkoff;
 
-    if (blkoff == 0 && chunk == disk_blksz) {
-      io_write(AM_DISK_BLKIO, .write = false, .buf = dst + done, .blkno = blkno, .blkcnt = 1);
-    } else {
-      io_write(AM_DISK_BLKIO, .write = false, .buf = bounce, .blkno = blkno, .blkcnt = 1);
-      memcpy(dst + done, bounce + blkoff, chunk);
-    }
+    io_write(AM_DISK_BLKIO, .write = false, .buf = bounce, .blkno = blkno, .blkcnt = 1);
+    memcpy(dst + done, bounce + blkoff, chunk);
     done += chunk;
   }
   return len;
@@ -55,13 +51,9 @@ size_t disk_write(const void *buf, size_t offset, size_t len) {
     size_t chunk = len - done;
     if (chunk > disk_blksz - blkoff) chunk = disk_blksz - blkoff;
 
-    if (blkoff == 0 && chunk == disk_blksz) {
-      io_write(AM_DISK_BLKIO, .write = true, .buf = (void *)(src + done), .blkno = blkno, .blkcnt = 1);
-    } else {
-      io_write(AM_DISK_BLKIO, .write = false, .buf = bounce, .blkno = blkno, .blkcnt = 1);
-      memcpy(bounce + blkoff, src + done, chunk);
-      io_write(AM_DISK_BLKIO, .write = true, .buf = bounce, .blkno = blkno, .blkcnt = 1);
-    }
+    io_write(AM_DISK_BLKIO, .write = false, .buf = bounce, .blkno = blkno, .blkcnt = 1);
+    memcpy(bounce + blkoff, src + done, chunk);
+    io_write(AM_DISK_BLKIO, .write = true, .buf = bounce, .blkno = blkno, .blkcnt = 1);
     done += chunk;
   }
   return len;

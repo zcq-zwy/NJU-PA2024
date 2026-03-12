@@ -30,7 +30,7 @@ size_t fb_write(const void *buf, size_t offset, size_t len);
 size_t sbctl_read(void *buf, size_t offset, size_t len);
 size_t sbctl_write(const void *buf, size_t offset, size_t len);
 size_t sb_write(const void *buf, size_t offset, size_t len);
-#if defined(__ISA_AM_NATIVE__) || defined(__ISA_NATIVE__)
+#if defined(__ISA_AM_NATIVE__) || defined(__ISA_NATIVE__) || defined(__PLATFORM_NEMU)
 size_t disk_read(void *buf, size_t offset, size_t len);
 size_t disk_write(const void *buf, size_t offset, size_t len);
 #else
@@ -115,7 +115,7 @@ size_t fs_read(int fd, void *buf, size_t len) {
   } else {
     size_t remain = (f->size > fi->open_offset ? f->size - fi->open_offset : 0);
     if (len > remain) len = remain;
-#if defined(__ISA_AM_NATIVE__) || defined(__ISA_NATIVE__)
+#if defined(__ISA_AM_NATIVE__) || defined(__ISA_NATIVE__) || defined(__PLATFORM_NEMU)
     ret = disk_read(buf, f->disk_offset + fi->open_offset, len);
 #else
     ret = ramdisk_read(buf, f->disk_offset + fi->open_offset, len);
@@ -135,7 +135,7 @@ size_t fs_write(int fd, const void *buf, size_t len) {
   } else {
     size_t remain = (f->size > fi->open_offset ? f->size - fi->open_offset : 0);
     if (len > remain) len = remain;
-#if defined(__ISA_AM_NATIVE__) || defined(__ISA_NATIVE__)
+#if defined(__ISA_AM_NATIVE__) || defined(__ISA_NATIVE__) || defined(__PLATFORM_NEMU)
     ret = disk_write(buf, f->disk_offset + fi->open_offset, len);
 #else
     ret = ramdisk_write(buf, f->disk_offset + fi->open_offset, len);
@@ -185,7 +185,7 @@ size_t fs_storage_used_bytes(void) {
 }
 
 size_t fs_storage_total_bytes(void) {
-#if defined(__ISA_AM_NATIVE__) || defined(__ISA_NATIVE__)
+#if defined(__ISA_AM_NATIVE__) || defined(__ISA_NATIVE__) || defined(__PLATFORM_NEMU)
   extern size_t get_disk_size(void);
   return get_disk_size();
 #else

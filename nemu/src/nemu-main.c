@@ -24,8 +24,8 @@ int is_exit_status_bad();
 #include <inttypes.h>
 #include <string.h>
 #include <assert.h>
+#ifndef CONFIG_TARGET_AM
 word_t expr(char *e, bool *success);  // 临时声明即可
-
 
 static void expr_batch_test(void) {
     FILE *fp = fopen("tools/gen-expr/input", "r");
@@ -55,9 +55,8 @@ static void expr_batch_test(void) {
 
     fclose(fp);
     printf("[expr-test] passed = %" PRIu64 "\n", passed);
-  }
-
-  
+}
+#endif
 
 int main(int argc, char *argv[]) {
   /* Initialize the monitor. */

@@ -35,6 +35,19 @@
 #define FB_ADDR         (MMIO_BASE   + 0x1000000)
 #define AUDIO_SBUF_ADDR (MMIO_BASE   + 0x1200000)
 
+#define DISK_BLKSZ_ADDR    (DISK_ADDR + 0x00)
+#define DISK_BLKCNT_ADDR   (DISK_ADDR + 0x04)
+#define DISK_BUF_LO_ADDR   (DISK_ADDR + 0x08)
+#define DISK_BUF_HI_ADDR   (DISK_ADDR + 0x0c)
+#define DISK_BLKNO_ADDR    (DISK_ADDR + 0x10)
+#define DISK_BLKIO_CNT_ADDR (DISK_ADDR + 0x14)
+#define DISK_CMD_ADDR      (DISK_ADDR + 0x18)
+#define DISK_STATUS_ADDR   (DISK_ADDR + 0x1c)
+
+#define DISK_CMD_NONE   0
+#define DISK_CMD_READ   1
+#define DISK_CMD_WRITE  2
+
 extern char _pmem_start;
 #define PMEM_SIZE (256 * 1024 * 1024)
 #define PMEM_END  ((uintptr_t)&_pmem_start + PMEM_SIZE)

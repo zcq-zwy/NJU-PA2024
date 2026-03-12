@@ -18,7 +18,7 @@ int main() {
 
   init_device();
 
-#if defined(__ISA_AM_NATIVE__) || defined(__ISA_NATIVE__)
+#if defined(__ISA_AM_NATIVE__) || defined(__ISA_NATIVE__) || defined(__PLATFORM_NEMU)
   init_disk();
 #else
   init_ramdisk();

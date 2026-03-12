@@ -7,12 +7,14 @@ include $(AM_HOME)/Makefile
 
 ifeq ($(ARCH),native)
 ISA = am_native
-SRCS := $(filter-out src/ramdisk.c src/resources.S,$(SRCS))
+SRCS := $(filter-out ./src/ramdisk.c src/ramdisk.c,$(SRCS))
+else ifneq ($(findstring -nemu,$(ARCH)),)
+SRCS := $(filter-out ./src/ramdisk.c src/ramdisk.c,$(SRCS))
 else
 INC_PATH += include $(NAVY_HOME)/libs/libc/include
 endif
 
-ifneq ($(ARCH),native)
+ifeq ($(findstring src/resources.S,$(SRCS)),src/resources.S)
 ./src/resources.S: $(RAMDISK_FILE)
 	@touch $@
 endif

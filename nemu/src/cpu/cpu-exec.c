@@ -98,7 +98,11 @@ static bool loop_detect_update(vaddr_t pc) {
 void device_update();
 
 // 监视点检查函数（在 sdb/watchpoint.c 中实现）
+#ifdef CONFIG_TARGET_AM
+static inline bool wp_check(void) { return false; }
+#else
 bool wp_check(void);
+#endif
 
 // 记录一条指令到 iringbuf。
 // - 开启 ITRACE 时直接复用反汇编字符串；
