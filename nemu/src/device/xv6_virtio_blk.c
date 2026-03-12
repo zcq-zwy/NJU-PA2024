@@ -82,7 +82,9 @@ static const char *get_disk_path(void) {
     snprintf(path, sizeof(path), "%s/build/ramdisk.img", navy_home);
     return path;
   }
+#ifdef CONFIG_HAS_DISK
   if (CONFIG_DISK_IMG_PATH[0] != '\0') return CONFIG_DISK_IMG_PATH;
+#endif
   return NULL;
 }
 
