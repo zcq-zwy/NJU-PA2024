@@ -21,7 +21,14 @@ struct run {
 struct {
   struct spinlock lock;
   struct run *freelist;
+  int refcnt[(PHYSTOP - KERNBASE) / PGSIZE];
 } kmem;
+
+static int
+pa2idx(uint32 pa)
+{
+  return (pa - KERNBASE) / PGSIZE;
+}
 
 void
 kinit()
@@ -36,6 +43,7 @@ freerange(void *pa_start, void *pa_end)
   char *p;
   p = (char*)PGROUNDUP((uint32)pa_start);
   for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE) {
+    kmem.refcnt[pa2idx((uint32)p)] = 1;
     kfree(p);
   }
 }
@@ -48,16 +56,26 @@ void
 kfree(void *pa)
 {
   struct run *r;
+  int idx;
 
   if(((uint32)pa % PGSIZE) != 0 || (char*)pa < end || (uint32)pa >= PHYSTOP)
     panic("kfree");
+
+  idx = pa2idx((uint32)pa);
+
+  acquire(&kmem.lock);
+  if(kmem.refcnt[idx] < 1)
+    panic("kfree ref");
+  kmem.refcnt[idx]--;
+  if(kmem.refcnt[idx] > 0){
+    release(&kmem.lock);
+    return;
+  }
 
   // Fill with junk to catch dangling refs.
   memset(pa, 1, PGSIZE);
 
   r = (struct run*)pa;
-
-  acquire(&kmem.lock);
   r->next = kmem.freelist;
   kmem.freelist = r;
   release(&kmem.lock);
@@ -73,8 +91,10 @@ kalloc(void)
 
   acquire(&kmem.lock);
   r = kmem.freelist;
-  if(r)
+  if(r){
     kmem.freelist = r->next;
+    kmem.refcnt[pa2idx((uint32)r)] = 1;
+  }
   release(&kmem.lock);
 
   if(r)
@@ -95,4 +115,23 @@ kfreemem(void)
   release(&kmem.lock);
 
   return free_pages * PGSIZE;
+}
+
+void
+kaddref(void *pa)
+{
+  acquire(&kmem.lock);
+  kmem.refcnt[pa2idx((uint32)pa)]++;
+  release(&kmem.lock);
+}
+
+int
+kgetref(void *pa)
+{
+  int ref;
+
+  acquire(&kmem.lock);
+  ref = kmem.refcnt[pa2idx((uint32)pa)];
+  release(&kmem.lock);
+  return ref;
 }

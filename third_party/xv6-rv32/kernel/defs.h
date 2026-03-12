@@ -63,6 +63,8 @@ void*           kalloc(void);
 void            kfree(void *);
 void            kinit();
 uint32          kfreemem(void);
+void            kaddref(void *);
+int             kgetref(void *);
 
 // log.c
 void            initlog(int, struct superblock*);
@@ -172,6 +174,7 @@ uint32          walkaddr(pagetable_t, uint32);
 int             copyout(pagetable_t, uint32, char *, uint32);
 int             copyin(pagetable_t, char *, uint32, uint32);
 int             copyinstr(pagetable_t, char *, uint32, uint32);
+int             cowalloc(pagetable_t, uint32);
 
 // plic.c
 void            plicinit(void);

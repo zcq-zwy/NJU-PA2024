@@ -47,39 +47,60 @@ void xv6_uart_input_char(uint8_t ch);
 #ifndef CONFIG_TARGET_AM
 static bool xv6_stdin_ready = false;
 static bool xv6_stdin_is_tty = false;
+static bool xv6_stdin_raw_mode = false;
+static bool xv6_stdin_need_close = false;
+static int xv6_stdin_fd = STDIN_FILENO;
 static int xv6_stdin_flags = -1;
 static struct termios xv6_stdin_termios = {};
 
 static void restore_xv6_uart_stdin(void) {
 #ifdef CONFIG_HAS_XV6_UART
   if (!xv6_stdin_ready) return;
-  if (xv6_stdin_is_tty) {
-    tcsetattr(STDIN_FILENO, TCSAFLUSH, &xv6_stdin_termios);
+  if (xv6_stdin_is_tty && xv6_stdin_raw_mode) {
+    tcsetattr(xv6_stdin_fd, TCSAFLUSH, &xv6_stdin_termios);
   }
   if (xv6_stdin_flags >= 0) {
-    fcntl(STDIN_FILENO, F_SETFL, xv6_stdin_flags);
+    fcntl(xv6_stdin_fd, F_SETFL, xv6_stdin_flags);
+  }
+  if (xv6_stdin_need_close) {
+    close(xv6_stdin_fd);
   }
 #endif
 }
 
 static void init_xv6_uart_stdin(void) {
 #ifdef CONFIG_HAS_XV6_UART
-  xv6_stdin_flags = fcntl(STDIN_FILENO, F_GETFL, 0);
-  if (xv6_stdin_flags < 0) return;
-
-  xv6_stdin_is_tty = isatty(STDIN_FILENO);
-  if (xv6_stdin_is_tty) {
-    if (tcgetattr(STDIN_FILENO, &xv6_stdin_termios) != 0) return;
-    struct termios raw = xv6_stdin_termios;
-    raw.c_lflag &= ~(ICANON | ECHO);
-    raw.c_iflag &= ~(IXON | ICRNL);
-    raw.c_cc[VMIN] = 0;
-    raw.c_cc[VTIME] = 0;
-    if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) != 0) return;
+  xv6_stdin_fd = open("/dev/tty", O_RDONLY);
+  if (xv6_stdin_fd >= 0) {
+    xv6_stdin_need_close = true;
+  } else {
+    xv6_stdin_fd = STDIN_FILENO;
+    xv6_stdin_need_close = false;
   }
 
-  if (fcntl(STDIN_FILENO, F_SETFL, xv6_stdin_flags | O_NONBLOCK) != 0) {
-    if (xv6_stdin_is_tty) tcsetattr(STDIN_FILENO, TCSAFLUSH, &xv6_stdin_termios);
+  xv6_stdin_flags = fcntl(xv6_stdin_fd, F_GETFL, 0);
+  if (xv6_stdin_flags < 0) return;
+
+  xv6_stdin_is_tty = isatty(xv6_stdin_fd);
+  if (xv6_stdin_is_tty) {
+    const char *raw_env = getenv("NEMU_XV6_UART_RAW");
+    xv6_stdin_raw_mode =
+      (raw_env != NULL) &&
+      (!strcmp(raw_env, "1") || !strcmp(raw_env, "true") || !strcmp(raw_env, "yes"));
+
+    if (xv6_stdin_raw_mode) {
+      if (tcgetattr(xv6_stdin_fd, &xv6_stdin_termios) != 0) return;
+      struct termios raw = xv6_stdin_termios;
+      raw.c_lflag &= ~(ICANON | ECHO);
+      raw.c_iflag &= ~(IXON | ICRNL);
+      raw.c_cc[VMIN] = 0;
+      raw.c_cc[VTIME] = 0;
+      if (tcsetattr(xv6_stdin_fd, TCSAFLUSH, &raw) != 0) return;
+    }
+  }
+
+  if (fcntl(xv6_stdin_fd, F_SETFL, xv6_stdin_flags | O_NONBLOCK) != 0) {
+    if (xv6_stdin_is_tty && xv6_stdin_raw_mode) tcsetattr(xv6_stdin_fd, TCSAFLUSH, &xv6_stdin_termios);
     return;
   }
   atexit(restore_xv6_uart_stdin);
@@ -93,12 +114,12 @@ static void poll_xv6_uart_stdin() {
   fd_set rfds;
   struct timeval timeout = {};
   FD_ZERO(&rfds);
-  FD_SET(STDIN_FILENO, &rfds);
-  int ret = select(STDIN_FILENO + 1, &rfds, NULL, NULL, &timeout);
-  if (ret <= 0 || !FD_ISSET(STDIN_FILENO, &rfds)) return;
+  FD_SET(xv6_stdin_fd, &rfds);
+  int ret = select(xv6_stdin_fd + 1, &rfds, NULL, NULL, &timeout);
+  if (ret <= 0 || !FD_ISSET(xv6_stdin_fd, &rfds)) return;
 
   uint8_t buf[128];
-  ssize_t nread = read(STDIN_FILENO, buf, sizeof(buf));
+  ssize_t nread = read(xv6_stdin_fd, buf, sizeof(buf));
   if (nread <= 0) return;
   for (ssize_t i = 0; i < nread; i++) {
     xv6_uart_input_char(buf[i]);

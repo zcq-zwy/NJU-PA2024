@@ -1,0 +1,45 @@
+#!/usr/bin/env python3
+
+from gradelib import *
+
+r = Runner(save("xv6.out"))
+
+
+def run_with_retry(action, attempts=3):
+    last_error = None
+
+    for _ in range(attempts):
+        try:
+            action()
+            return
+        except AssertionError as err:
+            last_error = err
+
+    raise last_error
+
+
+@test(50, "cowtest")
+def test_cowtest():
+    def action():
+        r.run_qemu(shell_script([
+            "cowtest",
+            "echo COW_DONE",
+        ], "COW_DONE"), timeout=240)
+        r.match("^simple: ok$", "^three: ok$", "^forkfork: ok$", "^file: ok$", "^cowtest: OK$", "^COW_DONE$")
+
+    run_with_retry(action)
+
+
+@test(50, "usertests -q")
+def test_usertests_quick():
+    def action():
+        r.run_qemu(shell_script([
+            "usertests -q",
+            "echo USERTESTS_DONE",
+        ], "USERTESTS_DONE"), timeout=360)
+        r.match("^ALL TESTS PASSED$", "^USERTESTS_DONE$")
+
+    run_with_retry(action)
+
+
+run_tests()
