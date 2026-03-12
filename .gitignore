@@ -16,5 +16,6 @@
 !.gitignore
 !init.sh
 !run_xv6_nemu.sh
+!run_xv6_smoke_test.sh
 /riscv-arch-test-am/
 /riscv-tests/
