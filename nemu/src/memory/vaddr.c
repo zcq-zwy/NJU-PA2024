@@ -16,6 +16,11 @@
 #include <isa.h>
 #include <memory/vaddr.h>
 #include <memory/paddr.h>
+#include <cpu/cpu.h>
+
+#define RISCV_EXCP_INST_PAGE_FAULT   12
+#define RISCV_EXCP_LOAD_PAGE_FAULT   13
+#define RISCV_EXCP_STORE_PAGE_FAULT  15
 
 static inline bool is_cross_page(vaddr_t addr, int len) {
   return ((addr & PAGE_MASK) + len) > PAGE_SIZE;
@@ -38,7 +43,10 @@ word_t vaddr_ifetch(vaddr_t addr, int len) {
   }
 
   paddr_t paddr = vaddr_translate(addr, len, MEM_TYPE_IFETCH);
-  Assert(paddr != MEM_RET_FAIL, "ifetch translate fail: va=%x len=%d satp=%x", addr, len, cpu.satp);
+  if (paddr == MEM_RET_FAIL) {
+    cpu_raise_exception(RISCV_EXCP_INST_PAGE_FAULT, addr);
+    return 0;
+  }
   return paddr_read(paddr, len);
 }
 
@@ -52,7 +60,10 @@ word_t vaddr_read(vaddr_t addr, int len) {
   }
 
   paddr_t paddr = vaddr_translate(addr, len, MEM_TYPE_READ);
-  Assert(paddr != MEM_RET_FAIL, "read translate fail: va=%x len=%d satp=%x", addr, len, cpu.satp);
+  if (paddr == MEM_RET_FAIL) {
+    cpu_raise_exception(RISCV_EXCP_LOAD_PAGE_FAULT, addr);
+    return 0;
+  }
   return paddr_read(paddr, len);
 }
 
@@ -66,6 +77,9 @@ void vaddr_write(vaddr_t addr, int len, word_t data) {
   }
 
   paddr_t paddr = vaddr_translate(addr, len, MEM_TYPE_WRITE);
-  Assert(paddr != MEM_RET_FAIL, "write translate fail: va=%x len=%d data=%x satp=%x", addr, len, data, cpu.satp);
+  if (paddr == MEM_RET_FAIL) {
+    cpu_raise_exception(RISCV_EXCP_STORE_PAGE_FAULT, addr);
+    return;
+  }
   paddr_write(paddr, len, data);
 }

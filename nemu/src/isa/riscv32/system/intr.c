@@ -32,6 +32,12 @@ static inline bool is_interrupt(word_t cause) {
   return (cause >> 31) != 0;
 }
 
+static word_t trap_tval = 0;
+
+void isa_set_trap_tval(word_t tval) {
+  trap_tval = tval;
+}
+
 word_t isa_raise_intr(word_t NO, vaddr_t epc) {
   word_t deleg_mask = is_interrupt(NO) ? cpu.mideleg : cpu.medeleg;
   bool delegated = ((deleg_mask >> (NO & 0x1f)) & 1) != 0 && cpu.priv != RISCV_PRIV_M;
@@ -44,8 +50,9 @@ word_t isa_raise_intr(word_t NO, vaddr_t epc) {
     cpu.priv = RISCV_PRIV_S;
     cpu.scause = NO;
     cpu.sepc = epc;
-    cpu.stval = 0;
+    cpu.stval = trap_tval;
     etrace_log(NO, epc, cpu.stvec);
+    trap_tval = 0;
     return cpu.stvec;
   }
 
@@ -56,8 +63,9 @@ word_t isa_raise_intr(word_t NO, vaddr_t epc) {
   cpu.priv = RISCV_PRIV_M;
   cpu.mcause = NO;
   cpu.mepc = epc;
-  cpu.mtval = 0;
+  cpu.mtval = trap_tval;
   etrace_log(NO, epc, cpu.mtvec);
+  trap_tval = 0;
   return cpu.mtvec;
 }
 

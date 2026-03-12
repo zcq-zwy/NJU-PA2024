@@ -17,6 +17,7 @@
 #include <cpu/decode.h>
 #include <cpu/difftest.h>
 #include <locale.h>
+#include <setjmp.h>
 
 /* The assembly code of instructions executed is only output to the screen
  * when the number of instructions executed is less than this value.
@@ -34,6 +35,10 @@ CPU_state cpu = {};
 uint64_t g_nr_guest_inst = 0;
 static uint64_t g_timer = 0; // unit: us
 static bool g_print_step = false;
+static jmp_buf g_exec_jmpbuf;
+static bool g_exec_jmpbuf_valid = false;
+static bool g_exec_has_exception = false;
+static vaddr_t g_exec_pc = 0;
 
 // 环形缓冲区本体：用于记录“最近执行过的指令字符串”。
 #ifdef CONFIG_TRACE
@@ -160,10 +165,18 @@ static void trace_and_difftest(Decode *_this, vaddr_t dnpc) {
 }
 
 static void exec_once(Decode *s, vaddr_t pc) {
+  g_exec_pc = pc;
   s->pc = pc;
   s->snpc = pc;
-  isa_exec_once(s);
-  cpu.pc = s->dnpc;
+  g_exec_has_exception = false;
+  g_exec_jmpbuf_valid = true;
+  if (setjmp(g_exec_jmpbuf) == 0) {
+    isa_exec_once(s);
+    cpu.pc = s->dnpc;
+  } else {
+    s->dnpc = cpu.pc;
+  }
+  g_exec_jmpbuf_valid = false;
 #ifdef CONFIG_ITRACE
   char *p = s->logbuf;
   p += snprintf(p, sizeof(s->logbuf), FMT_WORD ":", s->pc);
@@ -194,6 +207,10 @@ static void execute(uint64_t n) {
   Decode s;
   for (;n > 0; n --) {
     exec_once(&s, cpu.pc);
+    if (g_exec_has_exception) {
+      IFDEF(CONFIG_DEVICE, device_update());
+      continue;
+    }
     // 每执行完一条指令就写入环形缓冲，保证异常时能回溯最近现场。
     iringbuf_record(&s);
     g_nr_guest_inst ++;
@@ -217,6 +234,17 @@ static void execute(uint64_t n) {
       }
     });
   }
+}
+
+void cpu_raise_exception(word_t cause, vaddr_t tval) {
+  isa_set_trap_tval(tval);
+  cpu.pc = isa_raise_intr(cause, g_exec_pc);
+  g_exec_has_exception = true;
+  if (g_exec_jmpbuf_valid) longjmp(g_exec_jmpbuf, 1);
+}
+
+bool cpu_has_exception(void) {
+  return g_exec_has_exception;
 }
 
 static void statistic() {

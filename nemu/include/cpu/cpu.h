@@ -22,6 +22,8 @@ void cpu_exec(uint64_t n);
 
 void set_nemu_state(int state, vaddr_t pc, int halt_ret);
 void invalid_inst(vaddr_t thispc);
+void cpu_raise_exception(word_t cause, vaddr_t tval);
+bool cpu_has_exception(void);
 
 #define NEMUTRAP(thispc, code) set_nemu_state(NEMU_END, thispc, code)
 #define INV(thispc) invalid_inst(thispc)
