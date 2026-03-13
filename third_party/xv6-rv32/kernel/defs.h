@@ -117,6 +117,8 @@ void            swtch(struct context*, struct context*);
 
 // spinlock.c
 void            acquire(struct spinlock*);
+int             atomic_read4(int *);
+void            freelock(struct spinlock*);
 int             holding(struct spinlock*);
 void            initlock(struct spinlock*, char*);
 void            release(struct spinlock*);
@@ -134,6 +136,8 @@ void            releasewrite(struct rwspinlock*);
 void            write_release(struct rwspinlock*);
 int             holdingwrite(struct rwspinlock*);
 int             holding_write(struct rwspinlock*);
+int             statslock(char*, int);
+uint32          sys_rwlktest(void);
 
 // sleeplock.c
 void            acquiresleep(struct sleeplock*);
@@ -163,8 +167,10 @@ extern uint     ticks;
 void            trapinit(void);
 void            trapinithart(void);
 extern struct spinlock tickslock;
-extern struct rwspinlock ticksrwlock;
 void            usertrapret(void);
+
+// stats.c
+void            statsinit(void);
 
 // uart.c
 void            uartinit(void);

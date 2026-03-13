@@ -111,6 +111,8 @@ extern uint32 sys_sigreturn(void);
 extern uint32 sys_symlink(void);
 extern uint32 sys_connect(void);
 extern uint32 sys_pause(void);
+extern uint32 sys_rwlktest(void);
+extern uint32 sys_cpupin(void);
 
 static uint32 (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -141,6 +143,8 @@ static uint32 (*syscalls[])(void) = {
 [SYS_symlink] sys_symlink,
 [SYS_connect] sys_connect,
 [SYS_pause]   sys_pause,
+[SYS_rwlktest] sys_rwlktest,
+[SYS_cpupin]  sys_cpupin,
 };
 
 static char *syscall_names[] = {
@@ -172,6 +176,8 @@ static char *syscall_names[] = {
 [SYS_symlink] "symlink",
 [SYS_connect] "connect",
 [SYS_pause]   "pause",
+[SYS_rwlktest] "rwlktest",
+[SYS_cpupin]  "cpupin",
 };
 
 void

@@ -27,3 +27,5 @@
 #define SYS_symlink 26
 #define SYS_connect 27
 #define SYS_pause 28
+#define SYS_rwlktest 29
+#define SYS_cpupin 30

@@ -103,6 +103,7 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+  struct cpu *pincpu;          // Pinned CPU for lock lab tests
   int tracemask;               // trace() 指定的系统调用掩码
   int alarm_interval;          // sigalarm() 指定的触发间隔
   int alarm_elapsed;           // 当前已经累计的时钟中断数

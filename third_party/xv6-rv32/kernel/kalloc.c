@@ -156,7 +156,6 @@ kfree(void *pa)
   if(kmem_putref(idx) > 0)
     return;
 
-  memset(pa, 1, PGSIZE);
   kmem_push(kmem_cpuid(), (struct run*)pa);
 }
 
@@ -183,7 +182,6 @@ kalloc(void)
 
   if(r){
     kmem_setref(pa2idx((uint32)r), 1);
-    memset((char*)r, 5, PGSIZE); // fill with junk
   }
   return (void*)r;
 }

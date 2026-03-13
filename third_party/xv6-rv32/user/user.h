@@ -31,6 +31,11 @@ int sigreturn(void);
 int symlink(const char *, const char *);
 int connect(uint32, uint16, uint16);
 int pause(int);
+int rwlktest(void);
+int cpupin(int);
+int statistics(void*, int);
+
+#define SBRK_ERROR ((char*)-1)
 
 // ulib.c
 int stat(const char*, struct stat*);

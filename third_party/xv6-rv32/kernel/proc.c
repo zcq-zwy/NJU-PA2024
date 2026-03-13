@@ -104,6 +104,7 @@ allocproc(void)
 
 found:
   p->pid = allocpid();
+  p->pincpu = 0;
   p->tracemask = 0;
   p->alarm_interval = 0;
   p->alarm_elapsed = 0;
@@ -149,6 +150,7 @@ freeproc(struct proc *p)
   p->chan = 0;
   p->killed = 0;
   p->xstate = 0;
+  p->pincpu = 0;
   p->tracemask = 0;
   p->alarm_interval = 0;
   p->alarm_elapsed = 0;
@@ -488,7 +490,7 @@ scheduler(void)
 
     for(p = proc; p < &proc[NPROC]; p++) {
       acquire(&p->lock);
-      if(p->state == RUNNABLE) {
+      if(p->state == RUNNABLE && (p->pincpu == 0 || p->pincpu == c)) {
         // Switch to chosen process.  It is the process's job
         // to release its lock and then reacquire it
         // before jumping back to us.

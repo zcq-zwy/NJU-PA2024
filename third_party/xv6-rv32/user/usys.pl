@@ -43,3 +43,5 @@ entry("sigreturn");
 entry("symlink");
 entry("connect");
 entry("pause");
+entry("rwlktest");
+entry("cpupin");

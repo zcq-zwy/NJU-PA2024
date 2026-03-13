@@ -6,6 +6,7 @@ OBJS = \
   $K/start.o \
   $K/console.o \
   $K/printf.o \
+  $K/stats.o \
   $K/uart.o \
   $K/kalloc.o \
   $K/spinlock.o \
@@ -64,6 +65,8 @@ CFLAGS += -ffreestanding -fno-common -nostdlib -mno-relax
 CFLAGS += -I.
 CFLAGS += $(shell $(CC) -fno-stack-protector -E -x c /dev/null >/dev/null 2>&1 && echo -fno-stack-protector)
 CFLAGS += -DNET_TESTS_PORT=26099
+LOCKLAB_YEAR ?= 2025
+CFLAGS += -DLOCKLAB_YEAR=$(LOCKLAB_YEAR)
 
 # Disable PIE when possible (for Ubuntu 16.10 toolchain)
 ifneq ($(shell $(CC) -dumpspecs 2>/dev/null | grep -e '[^f]no-pie'),)
@@ -90,6 +93,7 @@ tags: $(OBJS) _init
 	etags *.S *.c
 
 ULIB = $U/ulib.o $U/usys.o $U/printf.o $U/umalloc.o
+ULIB += $U/statistics.o
 
 _%: %.o $(ULIB)
 	$(LD) $(LDFLAGS) -N -e main -Ttext 0 -o $@ $^
@@ -120,6 +124,7 @@ mkfs/mkfs: mkfs/mkfs.c $K/fs.h $K/param.h
 UPROGS=\
 	$U/_alarmtest\
 	$U/_bttest\
+	$U/_bcachetest\
 	$U/_bigfile\
 	$U/_call\
 	$U/_cat\
@@ -143,6 +148,7 @@ UPROGS=\
 	$U/_sh\
 	$U/_sleep\
 	$U/_stressfs\
+	$U/_stats\
 	$U/_symlinktest\
 	$U/_sysinfotest\
 	$U/_trace\

@@ -283,6 +283,7 @@ def build_env():
     if BUILD_READY:
         return
 
+    xv6_make("clean")
     xv6_make("kernel/kernel", "fs.img")
     run_cmd([
         OBJCOPY, "-S", "-O", "binary",
@@ -295,11 +296,12 @@ def build_env():
 
 
 def xv6_make(*targets):
+    locklab_year = os.environ.get("LOCKLAB_YEAR", "2025")
     cmd = [
         "make", "-C", XV6_HOME, *targets,
         "CC=riscv64-linux-gnu-gcc -march=rv32ima_zicsr -mabi=ilp32",
         "TOOLPREFIX=riscv64-linux-gnu-",
-        "CFLAGS=-Wall -Werror -O -fno-omit-frame-pointer -ggdb -MD -mcmodel=medany -ffreestanding -fno-common -nostdlib -mno-relax -I. -fno-stack-protector -fno-pie -no-pie -march=rv32ima_zicsr -mabi=ilp32 -DNET_TESTS_PORT=26099",
+        f"CFLAGS=-Wall -Werror -O -fno-omit-frame-pointer -ggdb -MD -mcmodel=medany -ffreestanding -fno-common -nostdlib -mno-relax -I. -fno-stack-protector -fno-pie -no-pie -march=rv32ima_zicsr -mabi=ilp32 -DNET_TESTS_PORT=26099 -DLOCKLAB_YEAR={locklab_year}",
         "LDFLAGS=-melf32lriscv -z max-page-size=4096",
     ]
     env = dict(os.environ)

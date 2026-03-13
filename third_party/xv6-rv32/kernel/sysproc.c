@@ -61,7 +61,6 @@ sys_sleep(void)
 
   if(argint(0, &n) < 0)
     return -1;
-  backtrace();
   acquire(&tickslock);
   ticks0 = ticks;
   while(ticks - ticks0 < n){
@@ -90,22 +89,10 @@ sys_kill(void)
 uint32
 sys_uptime(void)
 {
-  uint start, xticks;
-
-  acquireread(&ticksrwlock);
+  uint xticks;
   acquire(&tickslock);
-  start = ticks;
-  while(ticks - start < 1){
-    if(myproc()->killed){
-      release(&tickslock);
-      releaseread(&ticksrwlock);
-      return -1;
-    }
-    sleep(&ticks, &tickslock);
-  }
   xticks = ticks;
   release(&tickslock);
-  releaseread(&ticksrwlock);
   return xticks;
 }
 
@@ -113,27 +100,39 @@ uint32
 sys_pause(void)
 {
   int n;
-  uint start;
+  uint ticks0;
 
   if(argint(0, &n) < 0)
     return -1;
   if(n < 0)
-    return -1;
-
-  acquirewrite(&ticksrwlock);
+    n = 0;
   acquire(&tickslock);
-  start = ticks;
-  while(ticks - start < (uint)n){
+  ticks0 = ticks;
+  while(ticks - ticks0 < (uint)n){
     if(myproc()->killed){
       release(&tickslock);
-      releasewrite(&ticksrwlock);
       return -1;
     }
     sleep(&ticks, &tickslock);
   }
   release(&tickslock);
+  return 0;
+}
 
-  releasewrite(&ticksrwlock);
+uint32
+sys_cpupin(void)
+{
+  struct proc *p = myproc();
+  int cpu;
+
+  if(argint(0, &cpu) < 0)
+    return -1;
+  if(cpu < 0 || cpu >= NCPU)
+    return -1;
+
+  acquire(&p->lock);
+  p->pincpu = &cpus[cpu];
+  release(&p->lock);
   return 0;
 }
 
