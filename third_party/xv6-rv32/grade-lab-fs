@@ -1,0 +1,47 @@
+#!/usr/bin/env python3
+
+from gradelib import *
+
+r = Runner(save("xv6.out"))
+
+
+def run_with_retry(action, attempts=3):
+    last_error = None
+    for _ in range(attempts):
+        try:
+            action()
+            return
+        except AssertionError as err:
+            last_error = err
+    raise last_error
+
+
+@test(50, "bigfile")
+def test_bigfile():
+    def action():
+        r.run_qemu(shell_script([
+            "bigfile 299",
+        ]), timeout=180)
+        r.match("^bigfile: OK$")
+
+    run_with_retry(action)
+
+
+@test(50, "symlinktest")
+def test_symlinktest():
+    def action():
+        r.run_qemu(shell_script([
+            "symlinktest",
+        ]), timeout=120)
+        r.match(
+            "^symlinktest: basic OK$",
+            "^symlinktest: chain OK$",
+            "^symlinktest: nofollow OK$",
+            "^symlinktest: cycle OK$",
+            "^symlinktest: OK$",
+        )
+
+    run_with_retry(action)
+
+
+run_tests()

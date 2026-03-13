@@ -264,33 +264,55 @@ void
 iappend(uint inum, void *xp, int n)
 {
   char *p = (char*)xp;
-  uint fbn, off, n1;
+  uint fbn, bn, off, n1;
   struct dinode din;
   char buf[BSIZE];
   uint indirect[NINDIRECT];
-  uint x;
+  uint dindirect[NINDIRECT];
+  uint x, y;
 
   rinode(inum, &din);
   off = xint(din.size);
   // printf("append inum %d at off %d sz %d\n", inum, off, n);
   while(n > 0){
     fbn = off / BSIZE;
-    assert(fbn < MAXFILE);
-    if(fbn < NDIRECT){
-      if(xint(din.addrs[fbn]) == 0){
-        din.addrs[fbn] = xint(freeblock++);
+    bn = fbn;
+    assert(bn < MAXFILE);
+    if(bn < NDIRECT){
+      if(xint(din.addrs[bn]) == 0){
+        din.addrs[bn] = xint(freeblock++);
       }
-      x = xint(din.addrs[fbn]);
-    } else {
+      x = xint(din.addrs[bn]);
+    } else if(bn < NDIRECT + NINDIRECT) {
+      bn -= NDIRECT;
       if(xint(din.addrs[NDIRECT]) == 0){
         din.addrs[NDIRECT] = xint(freeblock++);
       }
       rsect(xint(din.addrs[NDIRECT]), (char*)indirect);
-      if(indirect[fbn - NDIRECT] == 0){
-        indirect[fbn - NDIRECT] = xint(freeblock++);
+      if(indirect[bn] == 0){
+        indirect[bn] = xint(freeblock++);
         wsect(xint(din.addrs[NDIRECT]), (char*)indirect);
       }
-      x = xint(indirect[fbn-NDIRECT]);
+      x = xint(indirect[bn]);
+    } else {
+      bn -= NDIRECT + NINDIRECT;
+      if(xint(din.addrs[NDIRECT + 1]) == 0){
+        din.addrs[NDIRECT + 1] = xint(freeblock++);
+      }
+      rsect(xint(din.addrs[NDIRECT + 1]), (char *)indirect);
+      if(indirect[bn / NINDIRECT] == 0){
+        indirect[bn / NINDIRECT] = xint(freeblock++);
+        bzero(dindirect, sizeof(dindirect));
+        wsect(xint(indirect[bn / NINDIRECT]), (char *)dindirect);
+        wsect(xint(din.addrs[NDIRECT + 1]), (char *)indirect);
+      }
+      y = xint(indirect[bn / NINDIRECT]);
+      rsect(y, (char *)dindirect);
+      if(dindirect[bn % NINDIRECT] == 0){
+        dindirect[bn % NINDIRECT] = xint(freeblock++);
+        wsect(y, (char *)dindirect);
+      }
+      x = xint(dindirect[bn % NINDIRECT]);
     }
     n1 = min(n, (fbn + 1) * BSIZE - off);
     rsect(x, buf);

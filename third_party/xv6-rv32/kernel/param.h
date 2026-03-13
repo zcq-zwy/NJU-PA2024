@@ -6,8 +6,8 @@
 #define NDEV         10  // maximum major device number
 #define ROOTDEV       1  // device number of file system root disk
 #define MAXARG       32  // max exec arguments
-#define MAXOPBLOCKS  10  // max # of blocks any FS op writes
+#define MAXOPBLOCKS  32  // fs lab 下增大单次事务，减少大文件写入开销
 #define LOGSIZE      (MAXOPBLOCKS*3)  // max data blocks in on-disk log
 #define NBUF         (MAXOPBLOCKS*3)  // size of disk block cache
-#define FSSIZE       1000  // size of file system in blocks
+#define FSSIZE       200000  // fs lab 需要更大的文件系统镜像
 #define MAXPATH      128   // maximum file path name

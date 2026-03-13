@@ -70,7 +70,17 @@ static void restore_xv6_uart_stdin(void) {
 
 static void init_xv6_uart_stdin(void) {
 #ifdef CONFIG_HAS_XV6_UART
-  xv6_stdin_fd = open("/dev/tty", O_RDONLY);
+  const char *stdin_mode = getenv("NEMU_XV6_UART_INPUT");
+  bool prefer_stdin =
+    (stdin_mode != NULL) &&
+    (!strcmp(stdin_mode, "stdin") || !strcmp(stdin_mode, "pipe"));
+
+  if (!prefer_stdin) {
+    xv6_stdin_fd = open("/dev/tty", O_RDONLY);
+  } else {
+    xv6_stdin_fd = -1;
+  }
+
   if (xv6_stdin_fd >= 0) {
     xv6_stdin_need_close = true;
   } else {

@@ -104,7 +104,7 @@ $U/_forktest: $U/forktest.o $(ULIB)
 	$(LD) $(LDFLAGS) -N -e main -Ttext 0 -o $U/_forktest $U/forktest.o $U/ulib.o $U/usys.o
 	$(OBJDUMP) -S $U/_forktest > $U/forktest.asm
 
-mkfs/mkfs: mkfs/mkfs.c $K/fs.h
+mkfs/mkfs: mkfs/mkfs.c $K/fs.h $K/param.h
 	gcc -Werror -Wall -I. -o mkfs/mkfs mkfs/mkfs.c
 
 # Prevent deletion of intermediate files, e.g. cat.o, after first build, so
@@ -116,6 +116,7 @@ mkfs/mkfs: mkfs/mkfs.c $K/fs.h
 UPROGS=\
 	$U/_alarmtest\
 	$U/_bttest\
+	$U/_bigfile\
 	$U/_call\
 	$U/_cat\
 	$U/_cowtest\
@@ -134,6 +135,7 @@ UPROGS=\
 	$U/_sh\
 	$U/_sleep\
 	$U/_stressfs\
+	$U/_symlinktest\
 	$U/_sysinfotest\
 	$U/_trace\
 	$U/_usertests\
