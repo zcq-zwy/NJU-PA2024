@@ -40,8 +40,10 @@ static inline bool machine_intr_enabled(void) {
 
 static inline bool supervisor_intr_enabled(void) {
   // 当前特权级低于 S（即 U 态）时，S 态中断全局可达；
-  // 只有当前就在 S 态时，才受 sstatus.SIE 控制。
-  return cpu.priv < RISCV_PRIV_S || (cpu.mstatus & SSTATUS_SIE);
+  // 只有当前就在 S 态时，才受 sstatus.SIE 控制；
+  // 当前在 M 态时，S 态中断不应直接生效，而应等待返回到 S/U 后再处理。
+  return cpu.priv < RISCV_PRIV_S ||
+    (cpu.priv == RISCV_PRIV_S && (cpu.mstatus & SSTATUS_SIE));
 }
 
 static word_t trap_tval = 0;
