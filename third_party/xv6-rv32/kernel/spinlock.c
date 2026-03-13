@@ -106,3 +106,122 @@ pop_off(void)
   if(c->noff == 0 && c->intena)
     intr_on();
 }
+
+static void
+rwlock_wait(struct rwspinlock *lk, int writer)
+{
+  for(;;){
+    acquire(&lk->lock);
+    if(writer){
+      if(lk->writer == 0 && lk->readers == 0){
+        lk->pending_writers--;
+        lk->writer = 1;
+        lk->cpu = mycpu();
+        release(&lk->lock);
+        return;
+      }
+    } else {
+      if(lk->writer == 0 && lk->pending_writers == 0){
+        lk->readers++;
+        release(&lk->lock);
+        return;
+      }
+    }
+    release(&lk->lock);
+  }
+}
+
+void
+initrwlock(struct rwspinlock *lk, char *name)
+{
+  initlock(&lk->lock, name);
+  lk->readers = 0;
+  lk->writer = 0;
+  lk->pending_writers = 0;
+  lk->name = name;
+  lk->cpu = 0;
+}
+
+void
+rwinitlock(struct rwspinlock *lk, char *name)
+{
+  initrwlock(lk, name);
+}
+
+void
+acquireread(struct rwspinlock *lk)
+{
+  rwlock_wait(lk, 0);
+}
+
+void
+read_acquire(struct rwspinlock *lk)
+{
+  acquireread(lk);
+}
+
+void
+releaseread(struct rwspinlock *lk)
+{
+  acquire(&lk->lock);
+  if(lk->readers < 1)
+    panic("releaseread");
+  lk->readers--;
+  release(&lk->lock);
+}
+
+void
+read_release(struct rwspinlock *lk)
+{
+  releaseread(lk);
+}
+
+void
+acquirewrite(struct rwspinlock *lk)
+{
+  acquire(&lk->lock);
+  lk->pending_writers++;
+  release(&lk->lock);
+
+  rwlock_wait(lk, 1);
+}
+
+void
+write_acquire(struct rwspinlock *lk)
+{
+  acquirewrite(lk);
+}
+
+void
+releasewrite(struct rwspinlock *lk)
+{
+  acquire(&lk->lock);
+  if(lk->writer == 0 || lk->cpu != mycpu())
+    panic("releasewrite");
+  lk->writer = 0;
+  lk->cpu = 0;
+  release(&lk->lock);
+}
+
+void
+write_release(struct rwspinlock *lk)
+{
+  releasewrite(lk);
+}
+
+int
+holdingwrite(struct rwspinlock *lk)
+{
+  int held;
+
+  acquire(&lk->lock);
+  held = lk->writer && lk->cpu == mycpu();
+  release(&lk->lock);
+  return held;
+}
+
+int
+holding_write(struct rwspinlock *lk)
+{
+  return holdingwrite(lk);
+}

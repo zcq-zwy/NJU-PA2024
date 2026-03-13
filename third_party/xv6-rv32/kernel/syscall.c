@@ -110,6 +110,7 @@ extern uint32 sys_sigalarm(void);
 extern uint32 sys_sigreturn(void);
 extern uint32 sys_symlink(void);
 extern uint32 sys_connect(void);
+extern uint32 sys_pause(void);
 
 static uint32 (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -139,6 +140,7 @@ static uint32 (*syscalls[])(void) = {
 [SYS_sigreturn] sys_sigreturn,
 [SYS_symlink] sys_symlink,
 [SYS_connect] sys_connect,
+[SYS_pause]   sys_pause,
 };
 
 static char *syscall_names[] = {
@@ -169,6 +171,7 @@ static char *syscall_names[] = {
 [SYS_sigreturn] "sigreturn",
 [SYS_symlink] "symlink",
 [SYS_connect] "connect",
+[SYS_pause]   "pause",
 };
 
 void

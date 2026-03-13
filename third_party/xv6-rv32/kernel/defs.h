@@ -5,6 +5,7 @@ struct inode;
 struct pipe;
 struct proc;
 struct spinlock;
+struct rwspinlock;
 struct sleeplock;
 struct stat;
 struct superblock;
@@ -121,6 +122,18 @@ void            initlock(struct spinlock*, char*);
 void            release(struct spinlock*);
 void            push_off(void);
 void            pop_off(void);
+void            initrwlock(struct rwspinlock*, char*);
+void            rwinitlock(struct rwspinlock*, char*);
+void            acquireread(struct rwspinlock*);
+void            read_acquire(struct rwspinlock*);
+void            releaseread(struct rwspinlock*);
+void            read_release(struct rwspinlock*);
+void            acquirewrite(struct rwspinlock*);
+void            write_acquire(struct rwspinlock*);
+void            releasewrite(struct rwspinlock*);
+void            write_release(struct rwspinlock*);
+int             holdingwrite(struct rwspinlock*);
+int             holding_write(struct rwspinlock*);
 
 // sleeplock.c
 void            acquiresleep(struct sleeplock*);
@@ -150,6 +163,7 @@ extern uint     ticks;
 void            trapinit(void);
 void            trapinithart(void);
 extern struct spinlock tickslock;
+extern struct rwspinlock ticksrwlock;
 void            usertrapret(void);
 
 // uart.c

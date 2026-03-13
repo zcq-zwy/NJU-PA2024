@@ -30,6 +30,7 @@ int sigalarm(int, void (*)());
 int sigreturn(void);
 int symlink(const char *, const char *);
 int connect(uint32, uint16, uint16);
+int pause(int);
 
 // ulib.c
 int stat(const char*, struct stat*);

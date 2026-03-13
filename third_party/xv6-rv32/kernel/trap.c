@@ -7,6 +7,7 @@
 #include "defs.h"
 
 struct spinlock tickslock;
+struct rwspinlock ticksrwlock;
 uint ticks;
 
 extern char trampoline[], uservec[], userret[];
@@ -20,6 +21,7 @@ void
 trapinit(void)
 {
   initlock(&tickslock, "time");
+  initrwlock(&ticksrwlock, "ticksrw");
 }
 
 // set up to take exceptions and traps while in the kernel.

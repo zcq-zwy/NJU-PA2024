@@ -90,12 +90,51 @@ sys_kill(void)
 uint32
 sys_uptime(void)
 {
-  uint xticks;
+  uint start, xticks;
 
+  acquireread(&ticksrwlock);
   acquire(&tickslock);
+  start = ticks;
+  while(ticks - start < 1){
+    if(myproc()->killed){
+      release(&tickslock);
+      releaseread(&ticksrwlock);
+      return -1;
+    }
+    sleep(&ticks, &tickslock);
+  }
   xticks = ticks;
   release(&tickslock);
+  releaseread(&ticksrwlock);
   return xticks;
+}
+
+uint32
+sys_pause(void)
+{
+  int n;
+  uint start;
+
+  if(argint(0, &n) < 0)
+    return -1;
+  if(n < 0)
+    return -1;
+
+  acquirewrite(&ticksrwlock);
+  acquire(&tickslock);
+  start = ticks;
+  while(ticks - start < (uint)n){
+    if(myproc()->killed){
+      release(&tickslock);
+      releasewrite(&ticksrwlock);
+      return -1;
+    }
+    sleep(&ticks, &tickslock);
+  }
+  release(&tickslock);
+
+  releasewrite(&ticksrwlock);
+  return 0;
 }
 
 uint32
