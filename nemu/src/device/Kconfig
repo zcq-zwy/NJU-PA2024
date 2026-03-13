@@ -83,6 +83,21 @@ config XV6_VIRTIO_BLK_IRQ
   default 1
 endif # HAS_XV6_VIRTIO_BLK
 
+menuconfig HAS_XV6_E1000
+  depends on !TARGET_AM
+  bool "Enable xv6 minimal e1000"
+  default n
+
+if HAS_XV6_E1000
+config XV6_E1000_MMIO
+  hex "MMIO address of the xv6 e1000 device"
+  default 0x10002000
+
+config XV6_E1000_IRQ
+  int "IRQ number of the xv6 e1000 device"
+  default 11
+endif # HAS_XV6_E1000
+
 menuconfig HAS_TIMER
   bool "Enable timer"
   default y

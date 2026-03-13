@@ -28,7 +28,10 @@ OBJS = \
   $K/sysfile.o \
   $K/kernelvec.o \
   $K/plic.o \
-  $K/virtio_disk.o
+  $K/virtio_disk.o \
+  $K/e1000.o \
+  $K/net.o \
+  $K/sysnet.o
 
 # riscv32-unknown-elf- or riscv32-linux-gnu-
 # perhaps in /opt/riscv/bin
@@ -60,6 +63,7 @@ CFLAGS += -mcmodel=medany
 CFLAGS += -ffreestanding -fno-common -nostdlib -mno-relax
 CFLAGS += -I.
 CFLAGS += $(shell $(CC) -fno-stack-protector -E -x c /dev/null >/dev/null 2>&1 && echo -fno-stack-protector)
+CFLAGS += -DNET_TESTS_PORT=26099
 
 # Disable PIE when possible (for Ubuntu 16.10 toolchain)
 ifneq ($(shell $(CC) -dumpspecs 2>/dev/null | grep -e '[^f]no-pie'),)
@@ -129,6 +133,8 @@ UPROGS=\
 	$U/_ln\
 	$U/_ls\
 	$U/_mkdir\
+	$U/_nettest\
+	$U/_nettests\
 	$U/_pingpong\
 	$U/_primes\
 	$U/_rm\

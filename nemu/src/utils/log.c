@@ -26,6 +26,7 @@ void init_log(const char *log_file) {
     FILE *fp = fopen(log_file, "w");
     Assert(fp, "Can not open '%s'", log_file);
     log_fp = fp;
+    setvbuf(log_fp, NULL, _IOLBF, 0);
   }
   Log("Log is written to %s", log_file ? log_file : "stdout");
 }

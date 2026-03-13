@@ -1,0 +1,41 @@
+#!/usr/bin/env python3
+
+from gradelib import *
+
+r = Runner(save("xv6.out"))
+
+
+@test(0, "running nettests")
+def test_nettests():
+    r.run_qemu(shell_script([
+        "nettests",
+        "echo NET_DONE",
+    ], "NET_DONE"), timeout=60)
+
+
+@test(40, "nettest: ping", parent=test_nettests)
+def test_ping():
+    r.match("^testing ping: OK$")
+
+
+@test(20, "nettest: single process", parent=test_nettests)
+def test_single():
+    r.match("^testing single-process pings: OK$")
+
+
+@test(20, "nettest: multi-process", parent=test_nettests)
+def test_multi():
+    r.match("^testing multi-process pings: OK$")
+
+
+@test(19, "nettest: DNS", parent=test_nettests)
+def test_dns():
+    r.match("^DNS OK$", "^NET_DONE$")
+
+
+@test(1, "time")
+def test_time():
+    check_time()
+
+
+run_tests()

@@ -331,6 +331,7 @@ class NEMUProcess(object):
         env["XV6_HOME"] = XV6_HOME
         env["SDL_VIDEODRIVER"] = SDL_VIDEODRIVER
         env["CCACHE_DISABLE"] = CCACHE_DISABLE
+        env["NEMU_XV6_UART_INPUT"] = "stdin"
         self.proc = subprocess.Popen(
             [
                 os.path.join(NEMU_HOME, "build", "riscv32-nemu-interpreter"),

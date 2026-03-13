@@ -206,6 +206,8 @@ devintr()
       uartintr();
     } else if(irq == VIRTIO0_IRQ){
       virtio_disk_intr();
+    } else if(irq == E1000_IRQ){
+      e1000_intr();
     } else {
     }
 

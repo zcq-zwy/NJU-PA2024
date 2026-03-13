@@ -35,6 +35,9 @@ kvminit()
   // virtio mmio disk interface
   kvmmap(VIRTIO0, VIRTIO0, PGSIZE, PTE_R | PTE_W);
 
+  // e1000 mmio 网卡接口
+  kvmmap(E1000, E1000, 0x20000, PTE_R | PTE_W);
+
   // CLINT
   kvmmap(CLINT, CLINT, 0x10000, PTE_R | PTE_W);
 

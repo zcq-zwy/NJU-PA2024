@@ -28,6 +28,8 @@ main()
     iinit();         // inode cache
     fileinit();      // file table
     virtio_disk_init(); // emulated hard disk
+    sockinit();      // 初始化 UDP socket 表
+    e1000_init((uint32 *)E1000); // 初始化最小 e1000 设备
     userinit();      // first user process
     __sync_synchronize();
     started = 1;

@@ -35,10 +35,6 @@ cd "$NEMU_HOME"
 
 stty sane || true
 
-if [ -r /dev/tty ]; then
-  exec env XV6_HOME="$XV6_HOME" SDL_VIDEODRIVER=dummy NEMU_XV6_UART_RAW=1 \
-    ./build/riscv32-nemu-interpreter -l "$NEMU_LOG" -b "$XV6_HOME/kernel/kernel.bin" < /dev/tty
-fi
-
-exec env XV6_HOME="$XV6_HOME" SDL_VIDEODRIVER=dummy NEMU_XV6_UART_RAW=1 \
+unset NEMU_XV6_UART_INPUT NEMU_XV6_UART_RAW
+exec env XV6_HOME="$XV6_HOME" SDL_VIDEODRIVER=dummy \
   ./build/riscv32-nemu-interpreter -l "$NEMU_LOG" -b "$XV6_HOME/kernel/kernel.bin"

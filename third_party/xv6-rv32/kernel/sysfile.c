@@ -408,6 +408,28 @@ sys_symlink(void)
 }
 
 uint32
+sys_connect(void)
+{
+  struct file *f;
+  int fd;
+  uint32 raddr;
+  int lport, rport;
+
+  if(argaddr(0, &raddr) < 0 ||
+     argint(1, &lport) < 0 ||
+     argint(2, &rport) < 0)
+    return -1;
+
+  if(sockalloc(&f, raddr, (uint16)lport, (uint16)rport) < 0)
+    return -1;
+  if((fd = fdalloc(f)) < 0){
+    fileclose(f);
+    return -1;
+  }
+  return fd;
+}
+
+uint32
 sys_mkdir(void)
 {
   char path[MAXPATH];

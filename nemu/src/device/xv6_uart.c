@@ -15,6 +15,10 @@
 
 #include <utils.h>
 #include <device/map.h>
+#include <stdlib.h>
+#include <stdarg.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 enum {
   UART_RHR = 0,
@@ -39,8 +43,52 @@ static uint8_t *xv6_uart_base = NULL;
 static uint8_t rx_queue[UART_QUEUE_LEN] = {};
 static int rx_head = 0, rx_tail = 0;
 static bool rx_irq_pending = false;
+static bool uart_trace = false;
+static int uart_trace_fd = -1;
 
 void xv6_plic_raise_irq(int irq);
+
+static bool env_enabled(const char *name) {
+  const char *value = getenv(name);
+  return value != NULL &&
+    (!strcmp(value, "1") || !strcmp(value, "true") || !strcmp(value, "yes"));
+}
+
+static void trace_open_file_once(void) {
+  if (uart_trace_fd >= 0) return;
+  const char *path = getenv("NEMU_XV6_UART_TRACE_FILE");
+  if (path == NULL || *path == '\0') return;
+  uart_trace_fd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0644);
+}
+
+static void trace_printf(const char *fmt, ...) {
+  if (!uart_trace) return;
+  trace_open_file_once();
+
+  va_list ap;
+  va_start(ap, fmt);
+  if (uart_trace_fd >= 0) {
+    vdprintf(uart_trace_fd, fmt, ap);
+    dprintf(uart_trace_fd, "\n");
+  } else {
+    vfprintf(stderr, fmt, ap);
+    fputc('\n', stderr);
+  }
+  va_end(ap);
+}
+
+static void trace_uart_char(const char *tag, int ch) {
+  if (!uart_trace) return;
+  if (ch >= 32 && ch <= 126) {
+    trace_printf("[uart] %s 0x%02x '%c'", tag, ch & 0xff, ch);
+  } else if (ch == '\n') {
+    trace_printf("[uart] %s 0x0a '\\n'", tag);
+  } else if (ch == '\r') {
+    trace_printf("[uart] %s 0x0d '\\r'", tag);
+  } else {
+    trace_printf("[uart] %s 0x%02x", tag, ch & 0xff);
+  }
+}
 
 static inline bool rx_queue_empty(void) {
   return rx_head == rx_tail;
@@ -74,13 +122,17 @@ static void sync_rx_state(void) {
       (xv6_uart_base[UART_IER] & UART_IER_RX_ENABLE) &&
       !rx_queue_empty()) {
     rx_irq_pending = true;
+    if (uart_trace) {
+      trace_printf("[uart] irq raise ier=0x%02x head=%d tail=%d",
+          xv6_uart_base[UART_IER], rx_head, rx_tail);
+    }
     xv6_plic_raise_irq(CONFIG_XV6_UART_IRQ);
   }
 }
 
 static void rx_enqueue(uint8_t ch) {
   if (rx_queue_full()) {
-    Log("xv6-uart rx queue overflow, dropping byte 0x%02x", ch);
+    trace_printf("[uart] rx queue overflow drop=0x%02x", ch);
     return;
   }
   rx_queue[rx_tail] = ch;
@@ -97,6 +149,7 @@ static int rx_dequeue(void) {
 void xv6_uart_input_char(uint8_t ch) {
   if (xv6_uart_base == NULL) return;
   rx_enqueue(ch);
+  trace_uart_char("enqueue", ch);
   sync_rx_state();
 }
 
@@ -107,11 +160,13 @@ static void xv6_uart_io_handler(uint32_t offset, int len, bool is_write) {
   switch (offset) {
     case UART_THR:
       if (is_write) {
+        trace_uart_char("tx", xv6_uart_base[UART_THR]);
         xv6_uart_putc(xv6_uart_base[UART_THR]);
         update_lsr();
       } else {
         int ch = rx_dequeue();
         xv6_uart_base[UART_RHR] = (ch < 0 ? 0xff : (uint8_t)ch);
+        if (ch >= 0) trace_uart_char("rx->guest", ch);
         if (rx_queue_empty()) rx_irq_pending = false;
         sync_rx_state();
       }
@@ -144,7 +199,9 @@ void init_xv6_uart() {
   memset(xv6_uart_base, 0, UART_REG_NR);
   rx_head = rx_tail = 0;
   rx_irq_pending = false;
+  uart_trace = env_enabled("NEMU_XV6_UART_TRACE");
   xv6_uart_base[UART_ISR] = UART_IIR_NO_INT;
   sync_rx_state();
+  if (uart_trace) trace_printf("[uart] trace enabled");
   add_mmio_map("xv6-uart", CONFIG_XV6_UART_MMIO, xv6_uart_base, UART_REG_NR, xv6_uart_io_handler);
 }

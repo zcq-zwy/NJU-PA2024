@@ -41,3 +41,4 @@ entry("sysinfo");
 entry("sigalarm");
 entry("sigreturn");
 entry("symlink");
+entry("connect");

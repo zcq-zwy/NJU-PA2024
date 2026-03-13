@@ -29,6 +29,7 @@ int sysinfo(struct sysinfo *);
 int sigalarm(int, void (*)());
 int sigreturn(void);
 int symlink(const char *, const char *);
+int connect(uint32, uint16, uint16);
 
 // ulib.c
 int stat(const char*, struct stat*);

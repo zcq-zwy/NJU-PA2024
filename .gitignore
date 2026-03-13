@@ -19,6 +19,10 @@
 !run_xv6_smoke_test.sh
 !run_xv6_fs_shell.sh
 !run_xv6_fs_cmd.sh
+!run_xv6_net_shell.sh
+!run_xv6_net_cmd.sh
+!run_xv6_net_shell_debug.sh
+!run_xv6_net_shell_clean.sh
 !XV6-Lab-Base说明.md
 /riscv-arch-test-am/
 /riscv-tests/
