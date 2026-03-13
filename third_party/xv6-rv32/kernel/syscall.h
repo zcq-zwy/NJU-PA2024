@@ -29,3 +29,5 @@
 #define SYS_pause 28
 #define SYS_rwlktest 29
 #define SYS_cpupin 30
+#define SYS_mmap 31
+#define SYS_munmap 32

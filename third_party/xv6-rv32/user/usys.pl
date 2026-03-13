@@ -45,3 +45,5 @@ entry("connect");
 entry("pause");
 entry("rwlktest");
 entry("cpupin");
+entry("mmap");
+entry("munmap");

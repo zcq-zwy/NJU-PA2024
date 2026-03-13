@@ -33,6 +33,8 @@ int connect(uint32, uint16, uint16);
 int pause(int);
 int rwlktest(void);
 int cpupin(int);
+void* mmap(void*, int, int, int, int, int);
+int munmap(void*, int);
 int statistics(void*, int);
 
 #define SBRK_ERROR ((char*)-1)
@@ -51,3 +53,5 @@ void* memset(void*, int, uint);
 void* malloc(uint);
 void free(void*);
 int atoi(const char*);
+int memcmp(const void*, const void*, uint);
+void* memcpy(void*, const void*, uint);

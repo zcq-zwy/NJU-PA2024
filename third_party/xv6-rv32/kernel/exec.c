@@ -111,6 +111,7 @@ exec(char *path, char **argv)
     
   // Commit to the user image.
   oldpagetable = p->pagetable;
+  mmap_proc_cleanup(p);
   p->pagetable = pagetable;
   p->sz = sz;
   p->tf->epc = elf.entry;  // initial program counter = main

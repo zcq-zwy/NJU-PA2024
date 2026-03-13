@@ -113,6 +113,8 @@ extern uint32 sys_connect(void);
 extern uint32 sys_pause(void);
 extern uint32 sys_rwlktest(void);
 extern uint32 sys_cpupin(void);
+extern uint32 sys_mmap(void);
+extern uint32 sys_munmap(void);
 
 static uint32 (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -145,6 +147,8 @@ static uint32 (*syscalls[])(void) = {
 [SYS_pause]   sys_pause,
 [SYS_rwlktest] sys_rwlktest,
 [SYS_cpupin]  sys_cpupin,
+[SYS_mmap]    sys_mmap,
+[SYS_munmap]  sys_munmap,
 };
 
 static char *syscall_names[] = {
@@ -178,6 +182,8 @@ static char *syscall_names[] = {
 [SYS_pause]   "pause",
 [SYS_rwlktest] "rwlktest",
 [SYS_cpupin]  "cpupin",
+[SYS_mmap]    "mmap",
+[SYS_munmap]  "munmap",
 };
 
 void

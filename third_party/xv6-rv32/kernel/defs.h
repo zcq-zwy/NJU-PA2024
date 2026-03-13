@@ -56,6 +56,11 @@ int             readi(struct inode*, int, uint32, uint, uint);
 void            stati(struct inode*, struct stat*);
 int             writei(struct inode*, int, uint32, uint, uint);
 
+// mmap.c
+int             mmap_handle_pagefault(struct proc*, uint32, uint32);
+void            mmap_fork(struct proc*, struct proc*);
+void            mmap_proc_cleanup(struct proc*);
+
 // ramdisk.c
 void            ramdiskinit(void);
 void            ramdiskintr(void);

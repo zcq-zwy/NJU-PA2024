@@ -17,6 +17,7 @@ OBJS = \
   $K/swtch.o \
   $K/trampoline.o \
   $K/trap.o \
+  $K/mmap.o \
   $K/syscall.o \
   $K/sysproc.o \
   $K/bio.o \
@@ -139,6 +140,7 @@ UPROGS=\
 	$U/_ln\
 	$U/_ls\
 	$U/_mkdir\
+	$U/_mmaptest\
 	$U/_nettest\
 	$U/_nettests\
 	$U/_pingpong\

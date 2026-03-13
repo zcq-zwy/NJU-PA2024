@@ -82,6 +82,18 @@ struct trapframe {
 
 enum procstate { UNUSED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
+#define NVMA 16
+
+struct vma {
+  int used;
+  uint32 addr;
+  uint32 len;
+  int prot;
+  int flags;
+  uint32 offset;
+  struct file *file;
+};
+
 // Per-process state
 struct proc {
   struct spinlock lock;
@@ -111,4 +123,5 @@ struct proc {
   int alarm_active;            // 是否正在执行用户态 alarm 处理函数
   uint32 alarm_handler;        // 用户态 alarm 处理函数入口
   struct trapframe alarm_tf;   // 进入 alarm 前保存的寄存器现场
+  struct vma vmas[NVMA];       // mmap() mappings
 };

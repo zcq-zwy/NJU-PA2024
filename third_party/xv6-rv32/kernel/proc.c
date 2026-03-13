@@ -112,6 +112,7 @@ found:
   p->alarm_active = 0;
   p->alarm_handler = 0;
   memset(&p->alarm_tf, 0, sizeof(p->alarm_tf));
+  memset(p->vmas, 0, sizeof(p->vmas));
 
   // Allocate a trapframe page.
   if((p->tf = (struct trapframe *)kalloc()) == 0){
@@ -158,6 +159,7 @@ freeproc(struct proc *p)
   p->alarm_active = 0;
   p->alarm_handler = 0;
   memset(&p->alarm_tf, 0, sizeof(p->alarm_tf));
+  memset(p->vmas, 0, sizeof(p->vmas));
   p->state = UNUSED;
 }
 
@@ -239,11 +241,19 @@ userinit(void)
 int
 growproc(int n)
 {
-  uint sz;
+  uint32 sz, limit;
+  int i;
   struct proc *p = myproc();
 
   sz = p->sz;
   if(n > 0){
+    limit = TRAPFRAME;
+    for(i = 0; i < NVMA; i++){
+      if(p->vmas[i].used && p->vmas[i].addr < limit)
+        limit = p->vmas[i].addr;
+    }
+    if(sz + n > limit)
+      return -1;
     if((sz = uvmalloc(p->pagetable, sz, sz + n)) == 0) {
       return -1;
     }
@@ -289,6 +299,7 @@ fork(void)
     if(p->ofile[i])
       np->ofile[i] = filedup(p->ofile[i]);
   np->cwd = idup(p->cwd);
+  mmap_fork(p, np);
   np->tracemask = p->tracemask;
   np->alarm_interval = p->alarm_interval;
   np->alarm_elapsed = 0;
@@ -360,6 +371,8 @@ exit(int status)
 
   if(p == initproc)
     panic("init exiting");
+
+  mmap_proc_cleanup(p);
 
   // Close all open files.
   for(int fd = 0; fd < NOFILE; fd++){

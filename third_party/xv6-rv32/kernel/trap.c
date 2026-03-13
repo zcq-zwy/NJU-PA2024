@@ -66,9 +66,15 @@ usertrap(void)
     intr_on();
 
     syscall();
-  } else if(r_scause() == 15){
-    if(r_stval() >= p->sz || cowalloc(p->pagetable, r_stval()) < 0)
+  } else if(r_scause() == 13 || r_scause() == 15 || r_scause() == 12){
+    uint32 faultva = r_stval();
+    if(mmap_handle_pagefault(p, faultva, r_scause()) == 0){
+    } else if(r_scause() == 15 &&
+              faultva < p->sz &&
+              cowalloc(p->pagetable, faultva) >= 0){
+    } else {
       p->killed = 1;
+    }
   } else if((which_dev = devintr()) != 0){
     // ok
   } else {
