@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+
+from gradelib import *
+
+r = Runner(save("xv6.out"))
+
+
+def run_with_retry(action, attempts=3):
+    last_error = None
+    for _ in range(attempts):
+        try:
+            action()
+            return
+        except AssertionError as err:
+            last_error = err
+    raise last_error
+
+
+@test(50, "kalloctest")
+def test_kalloc():
+    def action():
+        r.run_qemu(shell_script([
+            "kalloctest",
+            "echo KALLOC_DONE",
+        ], "KALLOC_DONE"), timeout=180)
+        r.match("^kalloctest: OK$", "^KALLOC_DONE$")
+
+    run_with_retry(action)
+
+
+@test(50, "rwlktest")
+def test_rwlk():
+    def action():
+        r.run_qemu(shell_script([
+            "rwlktest",
+            "echo RWLK_DONE",
+        ], "RWLK_DONE"), timeout=180)
+        r.match(
+            "^rwlktest: readers OK .*",
+            "^rwlktest: writer OK .*",
+            "^rwlktest: OK$",
+            "^RWLK_DONE$",
+        )
+
+    run_with_retry(action)
+
+
+run_tests()

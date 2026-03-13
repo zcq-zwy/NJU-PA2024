@@ -299,7 +299,7 @@ def xv6_make(*targets):
         "make", "-C", XV6_HOME, *targets,
         "CC=riscv64-linux-gnu-gcc -march=rv32ima_zicsr -mabi=ilp32",
         "TOOLPREFIX=riscv64-linux-gnu-",
-        "CFLAGS=-Wall -Werror -O -fno-omit-frame-pointer -ggdb -MD -mcmodel=medany -ffreestanding -fno-common -nostdlib -mno-relax -I. -fno-stack-protector -fno-pie -no-pie -march=rv32ima_zicsr -mabi=ilp32",
+        "CFLAGS=-Wall -Werror -O -fno-omit-frame-pointer -ggdb -MD -mcmodel=medany -ffreestanding -fno-common -nostdlib -mno-relax -I. -fno-stack-protector -fno-pie -no-pie -march=rv32ima_zicsr -mabi=ilp32 -DNET_TESTS_PORT=26099",
         "LDFLAGS=-melf32lriscv -z max-page-size=4096",
     ]
     env = dict(os.environ)
