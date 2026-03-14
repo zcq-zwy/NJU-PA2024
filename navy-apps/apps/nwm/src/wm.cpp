@@ -60,6 +60,26 @@ Window *WindowManager::spawn(const char *path, const char *argv[]) {
   return nullptr;
 }
 
+void WindowManager::reap_dead_windows() {
+  if (focus && focus->dead) {
+    focus = nullptr;
+  }
+  for (Window *&win: windows) {
+    if (win && win->dead) {
+      delete win;
+      win = nullptr;
+    }
+  }
+  if (!focus) {
+    for (Window *win: windows) {
+      if (win) {
+        focus = win;
+        break;
+      }
+    }
+  }
+}
+
 void WindowManager::render() {
   draw_window(background); // TODO: more gracefully handle these
   if (focus) {

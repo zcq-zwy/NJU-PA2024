@@ -2,6 +2,7 @@
 #define __NWM_H__
 
 #include <stdint.h>
+#include <sys/types.h>
 #include <stdio.h>
 #include <assert.h>
 #include <BDF.h>
@@ -43,6 +44,8 @@ public:
 
   int read_fd, write_fd; // IPC file descriptors. read_fd must be non-blocking
   int fbdev_fd;
+  pid_t pid;
+  bool dead;
   
   uint32_t *canvas;
   uint32_t *fb; // directly drawn by children
@@ -87,6 +90,7 @@ public:
   WindowManager(int width, int height);
   ~WindowManager();
   Window *spawn(const char *path, const char **argv);
+  void reap_dead_windows();
   void handle_event(const char *evt);
   void render();
   void mark_dirty(int x, int y);

@@ -126,6 +126,13 @@ void NDL_OpenCanvas(int *w, int *h) {
       if (strcmp(buf, "mmap ok") == 0) break;
     }
     close(fbctl);
+
+    screen_w = canvas_w;
+    screen_h = canvas_h;
+    present_w = canvas_w;
+    present_h = canvas_h;
+    present_x = 0;
+    present_y = 0;
   }
 
   canvas_x = present_x;

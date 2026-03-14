@@ -2,6 +2,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <stdlib.h>
+#include <errno.h>
 
 #define DECL(n, h) {n, sizeof(n) - 1, &WindowManager::evt_##h},
 
@@ -28,16 +29,22 @@ void WindowManager::evt_timer(const char *evt) {
   for (Window *w: windows) {
     if (w) w->update();
   }
+  reap_dead_windows();
   render();
 }
 
 static int ctrl = 0, alt = 0, shift = 0;
 
 static void send_key_to_apps(Window *win, const char *key, int down) {
-  assert(win->write_fd);
+  if (win->write_fd < 0) return;
   char buf[64];
   sprintf(buf, "k%c %s\n", (down ? 'd' : 'u'), key);
-  write(win->write_fd, buf, strlen(buf));
+  ssize_t ret = write(win->write_fd, buf, strlen(buf));
+  if (ret < 0 && (errno == EPIPE || errno == EBADF)) {
+    close(win->write_fd);
+    win->write_fd = -1;
+    win->dead = true;
+  }
 }
 
 void WindowManager::evt_keydown(const char *evt) {

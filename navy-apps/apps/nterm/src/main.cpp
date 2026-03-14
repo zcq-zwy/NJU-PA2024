@@ -188,7 +188,9 @@ int main(int argc, char *argv[]) {
   term = new Terminal(W, H);
 
   if (argc < 2) {
-    boot_audio_start();
+    if (getenv("NWM_APP") == NULL) {
+      boot_audio_start();
+    }
     builtin_sh_run();
   }
   else { extern_app_run(argv[1]); }

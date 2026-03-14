@@ -1,9 +1,11 @@
 #include <nwm.h>
 #include <NDL.h>
+#include <signal.h>
 
 #define RENDER_FPS 30
 
 int main() {
+  signal(SIGPIPE, SIG_IGN);
   int w = 0, h = 0;
   NDL_Init(0);
   NDL_OpenCanvas(&w, &h);

@@ -6,7 +6,9 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
+#include <errno.h>
 #include <sys/mman.h>
+#include <sys/wait.h>
 #ifdef __ISA_NATIVE__
 #include <sys/prctl.h>
 #include <signal.h>
@@ -53,8 +55,16 @@ void Window::draw() {
 Window::Window(WindowManager *wm, const char *cmd, const char * const *argv, const char **envp) {
   this->wm = wm;
   x = y = w = h = 0;
+  fw = fh = dx = dy = 0;
   canvas = nullptr;
   fb = nullptr;
+  read_fd = write_fd = fbdev_fd = -1;
+  pid = -1;
+  dead = false;
+  for (int i = 0; i < 2; i ++) {
+    app_to_nwm[i] = -1;
+    nwm_to_app[i] = -1;
+  }
 
   if (cmd) {
     has_titlebar = true;
@@ -95,13 +105,17 @@ Window::Window(WindowManager *wm, const char *cmd, const char * const *argv, con
       execve(argv[0], (char**)argv, (char**)envp);
       assert(0);
     } else {
+      assert(p > 0);
+      pid = p;
+      close(nwm_to_app[0]);
+      close(app_to_nwm[1]);
+      nwm_to_app[0] = -1;
+      app_to_nwm[1] = -1;
     }
   } else {
     // an internal window (without title bar)
     has_alpha = true;
     has_titlebar = false;
-    read_fd = write_fd = -1;
-    fbdev_fd = -1;
   }
 }
 
@@ -190,10 +204,21 @@ Window::~Window() {
     fbdev_fd = -1;
   }
   if (read_fd != -1) {
-     // close pipes
-    for (int i = 0; i < 2; i ++) {
+    close(read_fd);
+    read_fd = -1;
+  }
+  if (write_fd != -1) {
+    close(write_fd);
+    write_fd = -1;
+  }
+  for (int i = 0; i < 2; i ++) {
+    if (nwm_to_app[i] != -1) {
       close(nwm_to_app[i]);
+      nwm_to_app[i] = -1;
+    }
+    if (app_to_nwm[i] != -1) {
       close(app_to_nwm[i]);
+      app_to_nwm[i] = -1;
     }
   }
 }
@@ -203,16 +228,35 @@ void Window::update() {
     do {
       char buf[64];
       int nread = read(read_fd, buf, sizeof(buf) - 1); // this a non-blocking read
+      if (nread == 0) {
+        close(read_fd);
+        read_fd = -1;
+        break;
+      }
       if (nread == -1) break;
       buf[nread] = '\0';
       int w, h;
       int ret = sscanf(buf, "%d %d", &w, &h);
       if (ret == 2) resize(w, h);
     } while (1);
-    int y;
-    for (y = 0; y < fh; y ++) {
-      memcpy(&canvas[(dy + y) * w + dx], &fb[y * fw], fw * sizeof(uint32_t));
+  }
+
+  if (dead || canvas == nullptr || fb == nullptr || fw <= 0 || fh <= 0) return;
+  for (int y = 0; y < fh; y ++) {
+    memcpy(&canvas[(dy + y) * w + dx], &fb[y * fw], fw * sizeof(uint32_t));
+  }
+  draw();
+
+  if (!dead && pid > 0) {
+    int status = 0;
+    pid_t ret = waitpid(pid, &status, WNOHANG);
+    if (ret == pid) {
+      pid = -1;
+      dead = true;
+      if (write_fd != -1) {
+        close(write_fd);
+        write_fd = -1;
+      }
     }
-    draw();
   }
 }
