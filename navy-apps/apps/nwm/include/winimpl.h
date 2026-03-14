@@ -6,11 +6,11 @@
 
 static const char *nterm_argv[] = { "/bin/nterm", NULL };
 static const char *nslider_argv[] = { "/bin/nslider", NULL };
-static const char *fceux_argv[] = { "/bin/fceux", NULL };
+static const char *fceux_argv[] = { "/bin/fceux", "/share/games/nes/Mario.nes", NULL };
 static const char *pal_argv[] = { "/bin/pal", NULL };
 static const char *nplayer_argv[] = { "/bin/nplayer", NULL };
 static const char *typing_argv[] = { "/bin/typing-game", NULL };
-static const char *onscripter_argv[] = { "/bin/onscripter", "-r", "/share/games/onscripter/clannad", NULL };
+static const char *onscripter_argv[] = { "/bin/onscripter", "-r", "/share/games/planetarian", NULL };
 
 static const struct {
   const char *name;

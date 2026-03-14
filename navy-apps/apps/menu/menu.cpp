@@ -27,15 +27,14 @@ struct MenuItem {
 } items[] = {
   {"NJU Terminal", "/bin/nterm", NULL},
   {"NSlider", "/bin/nslider", NULL},
-  {"FCEUX (Super Mario Bros)", "/bin/fceux", "/share/games/nes/mario.nes"},
-  {"FCEUX (100 in 1)", "/bin/fceux", "/share/games/nes/100in1.nes"},
+  {"FCEUX (Super Mario Bros)", "/bin/fceux", "/share/games/nes/Mario.nes"},
+  {"ONScripter (Planetarian)", "/bin/onscripter", "/share/games/planetarian"},
   {"Flappy Bird", "/bin/bird", NULL},
   {"PAL - Xian Jian Qi Xia Zhuan", "/bin/pal", NULL},
   {"NPlayer", "/bin/nplayer", NULL},
   {"coremark", "/bin/coremark", NULL},
   {"dhrystone", "/bin/dhrystone", NULL},
   {"typing-game", "/bin/typing-game", NULL},
-  {"ONScripter", "/bin/onscripter", NULL},
 };
 
 #define nitems (sizeof(items) / sizeof(items[0]))
