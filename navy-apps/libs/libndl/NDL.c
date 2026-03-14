@@ -20,6 +20,9 @@ static int scale_mode = 1;
 static uint32_t *stretch_buf = NULL;
 static size_t stretch_buf_cap = 0;
 static uint32_t boot_time = 0;
+#define EVENT_BUF_SIZE 256
+static char event_buf[EVENT_BUF_SIZE];
+static int event_buf_len = 0;
 
 static void get_screen_size() {
   if (screen_w != 0 && screen_h != 0) return;
@@ -58,13 +61,31 @@ uint32_t NDL_GetTicks() {
 }
 
 int NDL_PollEvent(char *buf, int len) {
-  if (evtdev < 0 || len <= 0) return 0;
+  if (evtdev < 0 || len <= 1) return 0;
 
-  int nread = read(evtdev, buf, len - 1);
-  if (nread <= 0) return 0;
-  if (buf[nread - 1] == '\n') nread --;
-  buf[nread] = '\0';
-  return nread;
+  while (1) {
+    char *newline = memchr(event_buf, '\n', event_buf_len);
+    if (newline != NULL) {
+      int ncopy = newline - event_buf;
+      if (ncopy > len - 1) ncopy = len - 1;
+      memcpy(buf, event_buf, ncopy);
+      buf[ncopy] = '\0';
+
+      int remain = event_buf_len - (newline - event_buf + 1);
+      memmove(event_buf, newline + 1, remain);
+      event_buf_len = remain;
+      return ncopy;
+    }
+
+    if (event_buf_len >= EVENT_BUF_SIZE - 1) {
+      event_buf_len = 0;
+      return 0;
+    }
+
+    int nread = read(evtdev, event_buf + event_buf_len, EVENT_BUF_SIZE - 1 - event_buf_len);
+    if (nread <= 0) return 0;
+    event_buf_len += nread;
+  }
 }
 
 void NDL_OpenCanvas(int *w, int *h) {
@@ -243,6 +264,7 @@ int NDL_Init(uint32_t flags) {
     evtdev = open("/dev/events", 0, 0);
     fbdev = open("/dev/fb", 0, 0);
   }
+  event_buf_len = 0;
   return 0;
 }
 
